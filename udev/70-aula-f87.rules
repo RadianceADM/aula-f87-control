@@ -1,0 +1,5 @@
+# AULA F87 / F87 Pro: let the logged-in user open the lighting interface.
+# USB cable
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# 2.4G receiver
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", MODE="0660", GROUP="plugdev", TAG+="uaccess"

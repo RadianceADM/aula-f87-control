@@ -117,7 +117,8 @@ class WiredLink:
     def _read(self, cmd, length):
         resp = self._request(self._header(cmd | 0x80, length))
         if len(resp) < 8 + length or resp[1] != cmd | 0x80:
-            raise DeviceError("The keyboard sent an unexpected reply over USB.")
+            raise DeviceError("The keyboard sent an unexpected reply over USB. Is another program "
+                              "(or this app's music sync) using it right now?")
         return bytearray(resp[8:8 + length])
 
     def _write(self, cmd, body):
@@ -128,7 +129,8 @@ class WiredLink:
         # they fail every time.
         resp = self._request(bytes([0x06, 0x82, 0x01, 0x00, 0x01, 0x00, 0x06]), attempts=2)
         if len(resp) < 14 or resp[1] != 0x82:
-            raise DeviceError("The keyboard did not answer over USB.")
+            raise DeviceError("The keyboard did not answer over USB. Is another program "
+                              "(or this app's music sync) using it right now?")
         return MODELS.get(resp[13], "F87")
 
     can_read_blocks = True
@@ -348,7 +350,16 @@ class Cache:
         return blob if len(blob) == length else None
 
     def put(self, name, blob):
-        self.data[name] = bytes(blob).hex()
+        self._save(name, bytes(blob).hex())
+
+    def get_value(self, name):
+        return self.data.get(name)
+
+    def put_value(self, name, value):
+        self._save(name, value)
+
+    def _save(self, name, value):
+        self.data[name] = value
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data))
 
@@ -428,8 +439,22 @@ class Keyboard:
         self.cache.put("palette", pal)
 
     def read_battery(self):
-        """Battery over 2.4G as a Battery, or None (USB cable / no reply)."""
-        return self.link.read_battery()
+        """Battery over 2.4G as a Battery, or None (USB cable / no reply).
+
+        The keyboard only reports its level over 2.4G, and only while the cable
+        is unplugged, so the last real reading is remembered (see last_battery)."""
+        battery = self.link.read_battery()
+        if battery is not None and battery.percent is not None:
+            self.cache.put_value("battery", {"percent": battery.percent, "time": time.time()})
+        return battery
+
+    def last_battery(self):
+        """(percent, unix time) of the last 2.4G reading, or None."""
+        value = self.cache.get_value("battery")
+        try:
+            return int(value["percent"]), float(value["time"])
+        except (TypeError, KeyError, ValueError):
+            return None
 
     def set_sleep(self, minutes):
         """Idle minutes before the keyboard turns its backlight off; 0 = never.

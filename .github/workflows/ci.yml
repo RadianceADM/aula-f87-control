@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pip-install:
+    name: pip install (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install .
+      - run: aula-f87-control --help
+      - name: Import the core modules
+        run: python -c "import aula_f87.device, aula_f87.hidio, aula_f87.music, aula_f87.layout, aula_f87.effects"
+      - name: Fails cleanly without a keyboard
+        shell: bash
+        run: |
+          set +e
+          out="$(aula-f87-control status 2>&1)"; code=$?
+          echo "$out"
+          [ "$code" -ne 0 ] && echo "$out" | grep -q "No AULA F87 found"
+      - name: Tkinter window opens and closes (Windows)
+        if: runner.os == 'Windows'
+        run: python -c "from aula_f87 import gui_tk; app = gui_tk.App(); app.after(4000, app.destroy); app.mainloop(); print('window ok')"
+
+  linux-quick-install:
+    name: Linux quick installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run scripts/install-linux.sh on this checkout
+        env:
+          AULA_SOURCE: ${{ github.workspace }}
+        run: bash scripts/install-linux.sh
+      - name: Check the result
+        run: |
+          test -x "$HOME/.local/bin/aula-f87-control"
+          test -f "$HOME/.local/share/applications/io.github.aula_f87.Control.desktop"
+          test -f /etc/udev/rules.d/70-aula-f87.rules
+          "$HOME/.local/bin/aula-f87-control" --help
+          python3 -c "import sys; sys.path.insert(0, '$HOME/.local/share/aula-f87-control'); import aula_f87.gui, aula_f87.music"
+      - name: Uninstall
+        run: |
+          bash scripts/install-linux.sh --uninstall
+          test ! -e "$HOME/.local/bin/aula-f87-control"
+          test ! -e /etc/udev/rules.d/70-aula-f87.rules
+
+  windows-quick-install:
+    name: Windows quick installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run scripts/install-windows.ps1 on this checkout (Windows PowerShell 5.1)
+        shell: powershell
+        env:
+          AULA_PACKAGE: ${{ github.workspace }}
+        run: Get-Content scripts/install-windows.ps1 -Raw | Invoke-Expression
+      - name: Check the Start menu shortcut and the command
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'AULA F87 Control.lnk'
+          if (-not (Test-Path $link)) { throw 'Start menu shortcut is missing' }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if (-not (Test-Path $target)) { throw "Shortcut target is missing: $target" }
+          $cli = Join-Path (Split-Path $target) 'aula-f87-control.exe'
+          & $cli --help
+          if ($LASTEXITCODE -ne 0) { throw 'aula-f87-control --help failed' }
+      - name: Uninstall
+        shell: powershell
+        run: |
+          $env:AULA_UNINSTALL = 1
+          Get-Content scripts/install-windows.ps1 -Raw | Invoke-Expression
+          $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'AULA F87 Control.lnk'
+          if (Test-Path $link) { throw 'Shortcut was not removed' }

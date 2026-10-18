@@ -15,7 +15,7 @@ from tkinter import colorchooser, font as tkfont, ttk
 
 from . import device
 from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES, SLEEP_MINUTES,
-                      Effect, effect_info, nearest_sleep_index, sleep_label)
+                      Effect, battery_text, effect_info, nearest_sleep_index, sleep_label)
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U
 
 APPLY_DELAY_MS = 350
@@ -450,12 +450,7 @@ class App(tk.Tk):
         """Battery level over 2.4G; over the cable the keyboard runs on USB power."""
         if not self.kb:
             return
-        if battery is not None:
-            text = str(battery).capitalize()
-        elif self.kb.link.label == "USB cable":
-            text = "On USB power (the level is shown over 2.4G)"
-        else:
-            text = "Not reported"
+        text = battery_text(battery, self.kb.link.label == "USB cable", self.kb.last_battery())
         self.battery_label.configure(text=text)
         suffix = f"  ·  Battery {battery}" if battery is not None else ""
         self._status_text = self.kb.description + suffix

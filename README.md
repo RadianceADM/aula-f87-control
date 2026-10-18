@@ -1,5 +1,9 @@
 # AULA F87 Control
 
+[![CI](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml/badge.svg)](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/RadianceADM/aula-f87-control)](https://github.com/RadianceADM/aula-f87-control/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
 Control the lighting of the **AULA F87 / F87 Pro** mechanical keyboard on **Linux and Windows**,
 without AULA's own software.
 
@@ -34,7 +38,42 @@ Windows PC, so reports are welcome.
 
 ## Install
 
-### Ubuntu / Debian
+### Quick install
+
+**Linux** (Ubuntu, Debian, Fedora, Arch). Paste into a terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/RadianceADM/aula-f87-control/main/scripts/install-linux.sh | bash
+```
+
+**Windows 10 / 11.** Paste into PowerShell (no admin needed):
+
+```powershell
+irm https://raw.githubusercontent.com/RadianceADM/aula-f87-control/main/scripts/install-windows.ps1 | iex
+```
+
+Both scripts install the [latest release](https://github.com/RadianceADM/aula-f87-control/releases/latest):
+
+- **Linux:** the script asks for your password to install the required packages and the udev
+  rule. It then adds **AULA F87 Control** to the app menu and the `aula-f87-control` command.
+- **Windows:** the script installs Python with winget if it's missing, installs the app with
+  pip, and adds **AULA F87 Control** to the Start menu.
+
+Run the same command again to update. To uninstall:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/RadianceADM/aula-f87-control/main/scripts/install-linux.sh | bash -s -- --uninstall
+```
+
+```powershell
+$env:AULA_UNINSTALL = 1; irm https://raw.githubusercontent.com/RadianceADM/aula-f87-control/main/scripts/install-windows.ps1 | iex
+```
+
+It's a good habit to read a script before you run it:
+[install-linux.sh](scripts/install-linux.sh), [install-windows.ps1](scripts/install-windows.ps1).
+To install by hand instead, follow the steps below.
+
+### Ubuntu / Debian (manual)
 
 ```sh
 sudo apt install git python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-numpy pipewire-bin
@@ -61,7 +100,7 @@ steps above:
 - **Fedora:** `python3-gobject gtk4 libadwaita python3-numpy pipewire-utils`
 - **Arch:** `python-gobject gtk4 libadwaita python-numpy pipewire`
 
-### Windows 10 / 11
+### Windows 10 / 11 (manual)
 
 1. Install **Python 3.10 or newer** from [python.org](https://www.python.org/downloads/).
    In the installer, tick **"Add python.exe to PATH"**.
@@ -166,7 +205,7 @@ You can give `--effect` as a number or as the start of a name: `off`, `static`, 
 ## Troubleshooting
 
 **"Permission denied on /dev/hidrawN" (Linux).** Install the udev rule from
-[Ubuntu / Debian](#ubuntu--debian), then unplug and replug the keyboard or receiver.
+[Ubuntu / Debian](#ubuntu--debian-manual), then unplug and replug the keyboard or receiver.
 
 **"The 2.4G receiver is plugged in but the keyboard is not answering."** The keyboard is
 asleep, switched off, or in Bluetooth mode. Press a key, and check the mode switch on the
@@ -249,6 +288,12 @@ AULA_F87_AUDIO=soundcard python3 -m aula_f87 music  # use the Windows/macOS audi
 | `aula_f87/gui_tk.py` | Tkinter app (Windows, macOS, and the Linux fallback) |
 | `aula_f87/effects.py`, `layout.py` | Effect list, presets, key positions and LED numbers |
 | `aula_f87/__main__.py` | Command line and window selection |
+| `scripts/` | Quick install scripts for Linux and Windows |
+
+**Releases.** Bump `version` in `pyproject.toml`, add a section to `CHANGELOG.md`, then push a
+tag that matches the version, such as `git tag v0.2.1 && git push origin v0.2.1`. GitHub
+Actions builds the wheel and the source archive and publishes the release. CI tests installing
+with pip on Linux and Windows, and runs both quick installers, on every push.
 
 ## Credits
 

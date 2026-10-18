@@ -15,7 +15,8 @@ from gi.repository import Adw, Gdk, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E40
 
 from . import device  # noqa: E402
 from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES,  # noqa: E402
-                      SLEEP_MINUTES, Effect, effect_info, nearest_sleep_index, sleep_label)
+                      SLEEP_MINUTES, Effect, battery_text, effect_info, nearest_sleep_index,
+                      sleep_label)
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U  # noqa: E402
 
 APP_ID = "io.github.aula_f87.Control"
@@ -555,12 +556,7 @@ class Window(Adw.ApplicationWindow):
         """Battery level over 2.4G; over the cable the keyboard runs on USB power."""
         if not self.kb:
             return
-        if battery is not None:
-            text = str(battery).capitalize()
-        elif self.kb.link.label == "USB cable":
-            text = "On USB power (the level is shown over 2.4G)"
-        else:
-            text = "Not reported"
+        text = battery_text(battery, self.kb.link.label == "USB cable", self.kb.last_battery())
         self.battery = battery
         self.battery_row.set_subtitle(text)
         suffix = f" · Battery {battery}" if battery is not None else ""

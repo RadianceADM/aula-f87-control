@@ -1,0 +1,44 @@
+name: Release
+
+# Push a tag such as v0.2.0 (matching the version in pyproject.toml) to publish
+# a GitHub release with the wheel and source archive, using the matching
+# section of CHANGELOG.md as the release notes.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag matches the package version
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "pyproject.toml says $version, tag is $GITHUB_REF_NAME"; exit 1; }
+      - name: Build wheel and source archive
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: Smoke test the wheel
+        run: |
+          python -m pip install dist/*.whl
+          aula-f87-control --help
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            /^## / { if (found) exit; if (index($0, tag)) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "No CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
+          cat notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "AULA F87 Control $GITHUB_REF_NAME" --notes-file notes.md

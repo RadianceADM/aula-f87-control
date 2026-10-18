@@ -10,7 +10,7 @@ import threading
 import time
 
 from . import device
-from .effects import EFFECTS, SIDE_MODES, effect_info
+from .effects import EFFECTS, SIDE_MODES, battery_text, effect_info
 
 STYLE_NAMES = ("bars", "meter", "rainbow", "pulse")  # same order as music.STYLES
 
@@ -59,10 +59,7 @@ def _print_state(kb, state):
     print(f"Side lights: {side}")
     print(f"Sleep:      {_sleep_text(state.sleep)}")
     battery = kb.read_battery()
-    if battery is not None:
-        print(f"Battery:    {battery}")
-    elif kb.link.label == "USB cable":
-        print("Battery:    on USB power (level is only reported over 2.4G)")
+    print(f"Battery:    {battery_text(battery, kb.link.label == 'USB cable', kb.last_battery())}")
 
 
 def main(argv=None):

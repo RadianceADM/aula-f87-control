@@ -73,3 +73,19 @@ def sleep_label(minutes):
 
 def nearest_sleep_index(minutes):
     return min(range(len(SLEEP_MINUTES)), key=lambda i: abs(SLEEP_MINUTES[i] - minutes))
+
+
+def battery_text(battery, wired, last=None):
+    """Human text for the battery row. battery: Battery or None; last: (percent, time)."""
+    if battery is not None:
+        return str(battery).capitalize()
+    if wired:
+        text = "Not reported over the cable (it charges from USB)"
+        if last:
+            import time
+            percent, when = last
+            stamp = time.strftime("%H:%M" if time.time() - when < 86400 else "%b %d %H:%M",
+                                  time.localtime(when))
+            text += f" · last 2.4G reading: {percent}% at {stamp}"
+        return text
+    return "Not reported"

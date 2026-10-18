@@ -31,15 +31,17 @@ def _color(text):
     return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def gui_main(force_tk=False):
-    """Open the window: GTK 4 on Linux when available, otherwise Tkinter."""
+def gui_main(force_tk=False, background=False):
+    """Open the window: GTK 4 on Linux when available, otherwise Tkinter.
+
+    background: start with only the top-bar icon (GTK app on Linux)."""
     if sys.platform.startswith("linux") and not force_tk:
         try:
             from .gui import main as gtk_main
         except (ImportError, ValueError):  # PyGObject / GTK 4 / libadwaita missing
             pass
         else:
-            return gtk_main()
+            return gtk_main(background=background)
     from .gui_tk import main as tk_main
     return tk_main()
 
@@ -64,6 +66,8 @@ def _print_state(kb, state):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="aula-f87-control")
+    parser.add_argument("--background", action="store_true",
+                        help="start hidden with only the top-bar icon (used at login)")
     sub = parser.add_subparsers(dest="cmd")
     g = sub.add_parser("gui", help="open the window (default)")
     g.add_argument("--tk", action="store_true", help="use the Tkinter window even on Linux")
@@ -86,7 +90,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.cmd in (None, "gui"):
-        return gui_main(force_tk=getattr(args, "tk", False))
+        return gui_main(force_tk=getattr(args, "tk", False), background=args.background)
 
     try:
         kb = device.connect()

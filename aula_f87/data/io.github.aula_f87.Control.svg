@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="rgb" gradientUnits="userSpaceOnUse" x1="16" y1="0" x2="112" y2="0">
+      <stop offset="0" stop-color="#ff4040"/>
+      <stop offset="0.2" stop-color="#ffaa00"/>
+      <stop offset="0.4" stop-color="#3fe04f"/>
+      <stop offset="0.6" stop-color="#00cfff"/>
+      <stop offset="0.8" stop-color="#4f6bff"/>
+      <stop offset="1" stop-color="#d14bff"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="28" width="116" height="74" rx="14" fill="#1d1d21"/>
+  <rect x="7.5" y="29.5" width="113" height="71" rx="12.5" fill="none" stroke="url(#rgb)" stroke-width="3"/>
+  <g fill="url(#rgb)">
+    <rect x="17" y="39" width="12" height="11" rx="2.5"/>
+    <rect x="32" y="39" width="12" height="11" rx="2.5"/>
+    <rect x="47" y="39" width="12" height="11" rx="2.5"/>
+    <rect x="62" y="39" width="12" height="11" rx="2.5"/>
+    <rect x="77" y="39" width="12" height="11" rx="2.5"/>
+    <rect x="92" y="39" width="19" height="11" rx="2.5"/>
+    <rect x="17" y="54" width="17" height="11" rx="2.5"/>
+    <rect x="37" y="54" width="12" height="11" rx="2.5"/>
+    <rect x="52" y="54" width="12" height="11" rx="2.5"/>
+    <rect x="67" y="54" width="12" height="11" rx="2.5"/>
+    <rect x="82" y="54" width="12" height="11" rx="2.5"/>
+    <rect x="97" y="54" width="14" height="11" rx="2.5"/>
+    <rect x="17" y="69" width="12" height="11" rx="2.5"/>
+    <rect x="32" y="69" width="52" height="11" rx="2.5"/>
+    <rect x="87" y="69" width="11" height="11" rx="2.5"/>
+    <rect x="101" y="69" width="10" height="11" rx="2.5"/>
+  </g>
+</svg>

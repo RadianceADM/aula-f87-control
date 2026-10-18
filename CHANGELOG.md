@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0 — 2026-10-19
+
+- **Top-bar icon (Linux).** A quick menu for music sync and its style, keep backlight on,
+  colors, effects and brightness, plus opening the window, start at login and quitting. The
+  battery % is shown next to the icon over 2.4G. It's built directly on D-Bus
+  (StatusNotifierItem + dbusmenu), so it needs no extra packages and works with Ubuntu's
+  AppIndicators extension.
+- **Runs in the background.** Closing the window keeps the app, and music sync, running in
+  the top bar. Use **Quit** in the menu to stop it.
+- **Starts at login.** `install.sh` and the quick installer turn this on and start the app
+  right away. Turn it off with *Start at login* in the menu or `./install.sh --no-autostart`.
+  Re-installing restarts a running copy so updates take effect.
+- **New app icon.**
+- New `--background` option.
+
 ## v0.2.0 — 2026-10-19
 
 First public release.

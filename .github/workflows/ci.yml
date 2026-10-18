@@ -49,12 +49,15 @@ jobs:
           test -x "$HOME/.local/bin/aula-f87-control"
           test -f "$HOME/.local/share/applications/io.github.aula_f87.Control.desktop"
           test -f /etc/udev/rules.d/70-aula-f87.rules
+          test -f "$HOME/.config/autostart/io.github.aula_f87.Control.desktop"
+          test -f "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.aula_f87.Control.svg"
           "$HOME/.local/bin/aula-f87-control" --help
-          python3 -c "import sys; sys.path.insert(0, '$HOME/.local/share/aula-f87-control'); import aula_f87.gui, aula_f87.music"
+          python3 -c "import sys; sys.path.insert(0, '$HOME/.local/share/aula-f87-control'); import aula_f87.gui, aula_f87.music, aula_f87.tray"
       - name: Uninstall
         run: |
           bash scripts/install-linux.sh --uninstall
           test ! -e "$HOME/.local/bin/aula-f87-control"
+          test ! -e "$HOME/.config/autostart/io.github.aula_f87.Control.desktop"
           test ! -e /etc/udev/rules.d/70-aula-f87.rules
 
   windows-quick-install:

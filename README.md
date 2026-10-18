@@ -1,4 +1,4 @@
-# AULA F87 Control
+# <img src="aula_f87/data/io.github.aula_f87.Control.svg" width="40" align="top" alt=""> AULA F87 Control
 
 [![CI](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml/badge.svg)](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/RadianceADM/aula-f87-control)](https://github.com/RadianceADM/aula-f87-control/releases/latest)
@@ -19,6 +19,9 @@ without AULA's own software.
 - **Battery level** (over 2.4G) and **sleep timer.** Keep the backlight always on, or choose
   when it turns off.
 - **Side lights** effect.
+- **Top-bar icon** (Linux). A quick menu for music sync, keep backlight on, colors, effects and
+  brightness, with the battery % next to the icon. It starts at login and keeps running when
+  you close the window.
 - Works over the **USB cable** and the **2.4G receiver**.
 - A **command line** for scripts and shortcuts.
 - Needs no drivers and no admin rights once set up. Settings are stored in the keyboard
@@ -58,7 +61,8 @@ irm https://raw.githubusercontent.com/RadianceADM/aula-f87-control/main/scripts/
 Both scripts install the [latest release](https://github.com/RadianceADM/aula-f87-control/releases/latest):
 
 - **Linux:** the script asks for your password to install the required packages and the udev
-  rule. It then adds **AULA F87 Control** to the app menu and the `aula-f87-control` command.
+  rule. It then adds **AULA F87 Control** to the app menu and the `aula-f87-control` command,
+  and starts the app at login with its [top-bar icon](#top-bar-icon-linux).
 - **Windows:** the script installs Python with winget if it's missing, installs the app with
   pip, and adds **AULA F87 Control** to the Start menu.
 
@@ -93,9 +97,13 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 Open **AULA F87 Control** from the app menu. If the keyboard isn't found, unplug and replug the
 cable or receiver once, so the new permission applies.
 
-`install.sh` adds a launcher and an app-menu entry that run the app from the cloned folder, so
-keep the folder where it is. To update, run `git pull` in the folder. To uninstall, run
-`./install.sh --remove`.
+`install.sh` adds the `aula-f87-control` command, the app-menu entry and its icon, all running
+the app from the cloned folder, so keep the folder where it is. It also makes the app start at
+login with its [top-bar icon](#top-bar-icon-linux), and starts it right away. Use
+`./install.sh --no-autostart` to skip both.
+
+- **Update:** run `git pull` and then `./install.sh` again. This restarts the app.
+- **Uninstall:** run `./install.sh --remove`.
 
 On other distributions, install the same packages under their own names, then follow the
 steps above:
@@ -131,7 +139,7 @@ such as BlackHole, set as the default input.
 ## Using the app
 
 The Ubuntu app uses GTK and looks native on GNOME. Windows and macOS get a simpler window with
-the same tabs and features. On Linux you can open that one too, with `aula-f87-control gui --tk`
+the same tabs and features, but without the top-bar icon and without starting at login. On Linux you can open that one too, with `aula-f87-control gui --tk`
 (needs `python3-tk`).
 
 ### Lighting
@@ -144,6 +152,29 @@ the same tabs and features. On Linux you can open that one too, with `aula-f87-c
 - **Side lights.** Choose the effect of the lights on the sides of the case.
 - **The light bar above the arrow keys** is controlled on the keyboard. Press **Fn + Left Shift**
   to cycle its effects (see [Troubleshooting](#troubleshooting)).
+
+### Top-bar icon (Linux)
+
+The keyboard icon in the top bar gives you quick access without opening the window. Over
+2.4G, the battery level is shown next to it. Click the icon for this menu:
+
+| Menu item | What it does |
+|---|---|
+| Keyboard name and battery | Shows the current connection |
+| **Music sync** | Starts or stops music sync. *Music style* picks the look. |
+| **Keep backlight on** | Turns the sleep timer on or off |
+| **Color**, **Effect**, **Brightness** | Quick lighting changes, the same as in the window |
+| **Open AULA F87 Control** | Shows the window. Launching the app from the app menu does the same. |
+| **Start at login** | Turns starting at login on or off |
+| **Quit** | Stops the app, including music sync |
+
+Closing the window doesn't stop the app. It keeps running in the top bar, so music sync
+continues with the window closed. Use **Quit** in the menu to stop it.
+
+The icon needs a top-bar tray. Ubuntu has one built in (the *Ubuntu AppIndicators*
+extension). On other GNOME systems, install *AppIndicator and KStatusNotifierItem Support*.
+KDE Plasma and most other desktops show it without any extra setup. If there is no tray,
+closing the window quits the app as usual.
 
 ### Power
 
@@ -200,6 +231,7 @@ times per second, because the radio can't take frames any faster.
 | `aula-f87-control sleep 10` | Backlight turns off after 10 idle minutes |
 | `aula-f87-control music --style bars` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. Options: `--sensitivity 0.5–2`, `--brightness 0.1–1`, `--seconds N` |
 | `aula-f87-control gui --tk` | Open the simpler Tkinter window, even on Linux |
+| `aula-f87-control --background` | Start with only the top-bar icon. This is what runs at login. |
 
 You can give `--effect` as a number or as the start of a name: `off`, `static`, `breathing`,
 `rainbow`, `flash`, `raindrops`, `ripples`, `twinkling`, `retro`, `neon`, `reactive`, `sine`,
@@ -231,6 +263,15 @@ audio output. On Linux the app needs `pw-record` (`sudo apt install pipewire-bin
 
 **Battery shows "On USB power".** That's expected on the cable. The keyboard only reports its
 level over 2.4G, and over 2.4G it shows "Charging" while the cable is plugged in.
+
+**There's no icon in the top bar (Linux).** On Ubuntu, run
+`gnome-extensions enable ubuntu-appindicators@ubuntu.com`. On other GNOME systems, install the
+*AppIndicator and KStatusNotifierItem Support* extension (on Fedora and Arch the package is
+called `gnome-shell-extension-appindicator`), then log out and back in. The app is probably
+still running in the background, so opening it from the app menu shows its window.
+
+**I don't want it to start at login.** Untick **Start at login** in the top-bar menu, or
+reinstall with `./install.sh --no-autostart`.
 
 **Changes over 2.4G take a moment.** Each change takes about half a second over the radio.
 
@@ -289,6 +330,9 @@ AULA_F87_AUDIO=soundcard python3 -m aula_f87 music  # use the Windows/macOS audi
 | `aula_f87/music.py` | Audio capture, spectrum analysis and music-sync rendering |
 | `aula_f87/gui.py` | GTK 4 / libadwaita app (Linux) |
 | `aula_f87/gui_tk.py` | Tkinter app (Windows, macOS, and the Linux fallback) |
+| `aula_f87/tray.py` | Top-bar icon: StatusNotifierItem and dbusmenu over D-Bus |
+| `aula_f87/autostart.py` | Start at login (freedesktop autostart) |
+| `aula_f87/data/` | App icon and top-bar icon |
 | `aula_f87/effects.py`, `layout.py` | Effect list, presets, key positions and LED numbers |
 | `aula_f87/__main__.py` | Command line and window selection |
 | `scripts/` | Quick install scripts for Linux and Windows |

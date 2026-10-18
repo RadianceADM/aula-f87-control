@@ -11,9 +11,10 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gsk", "4.0")
 gi.require_version("Graphene", "1.0")
-from gi.repository import Adw, Gdk, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
-from . import device  # noqa: E402
+from . import autostart, device  # noqa: E402
+from .tray import SEPARATOR, Item  # noqa: E402
 from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES,  # noqa: E402
                       SLEEP_MINUTES, Effect, battery_text, effect_info, nearest_sleep_index,
                       sleep_label)
@@ -231,6 +232,12 @@ class Window(Adw.ApplicationWindow):
         view.add_top_bar(self.banner)
         self.set_content(view)
 
+        self.tray = None
+        connection = app.get_dbus_connection()
+        if connection is not None:
+            from .tray import Tray
+            self.tray = Tray(connection, "AULA F87 Control", self._tray_menu, self.show_window)
+
         self._sync_widgets()
         self.connect_keyboard()
         GLib.timeout_add_seconds(POLL_SECONDS, self._poll)
@@ -414,6 +421,7 @@ class Window(Adw.ApplicationWindow):
             self._start_music()
 
     def _music_settings(self):
+        self._tray_refresh()
         if self.music:
             self.music.style = self.music_style_row.get_selected()
             self.music.sensitivity = self.sensitivity.get_value()
@@ -485,10 +493,91 @@ class Window(Adw.ApplicationWindow):
         self.toasts.add_toast(Adw.Toast(title=f"Music sync stopped: {exc}", timeout=6))
 
     def _on_close(self, *_):
+        # With the top-bar icon showing, closing the window keeps the app (and
+        # music sync) running in the background; "Quit" in the icon's menu ends it.
+        if self.tray and self.tray.available:
+            self.set_visible(False)
+            return True
+        self._shutdown()
+        return False
+
+    def _shutdown(self):
         if self.music:
             self.music.stop()
             self.music = None
-        return False
+        if self.tray:
+            self.tray.close()
+            self.tray = None
+
+    def show_window(self):
+        self.set_visible(True)
+        self.present()
+
+    def quit_app(self):
+        self._shutdown()
+        self.get_application().quit()
+
+    # ------------------------------------------------------------------ top-bar icon
+
+    def _tray_menu(self):
+        connected = self.kb is not None
+        editable = connected and self.music is None and not self._music_starting
+        header = self.kb.description if connected else "Keyboard not connected"
+        items = [Item(header, enabled=False)]
+        if connected and self.battery is not None:
+            items.append(Item(f"Battery: {battery_text(self.battery, False)}", enabled=False))
+        items += [
+            SEPARATOR,
+            Item("Music sync", self._toggle_music, toggle="checkmark",
+                 checked=self.music is not None, enabled=connected and not self._music_starting),
+            Item("Music style", children=[
+                Item(name, lambda i=i: self.music_style_row.set_selected(i), toggle="radio",
+                     checked=self.music_style_row.get_selected() == i)
+                for i, name in enumerate(MUSIC_STYLES)]),
+            Item("Keep backlight on",
+                 lambda: self.keep_on_row.set_active(not self.keep_on_row.get_active()),
+                 toggle="checkmark", checked=self.keep_on_row.get_active(), enabled=editable),
+            SEPARATOR,
+            Item("Color", enabled=editable, children=[
+                Item(name, lambda c=rgb: self._pick_preset(c)) for name, rgb in PRESETS
+            ] + [SEPARATOR, Item("Rainbow", self._tray_rainbow, toggle="checkmark",
+                                 checked=self.state.colorful or not effect_info(self.state.effect).color)]),
+            Item("Effect", enabled=editable, children=[
+                Item(e.name, lambda i=i: self.effect_row.set_selected(i), toggle="radio",
+                     checked=e.id == self.state.effect)
+                for i, e in enumerate(self._effects)]),
+            Item("Brightness", enabled=editable and 1 <= self.state.effect <= 18, children=[
+                Item("Off" if n == 0 else f"{n * 25}%", lambda n=n: self.brightness.set_value(n),
+                     toggle="radio", checked=self.state.brightness == n)
+                for n in range(5)]),
+            SEPARATOR,
+            Item("Open AULA F87 Control", self.show_window),
+            Item("Start at login", self._toggle_autostart, toggle="checkmark",
+                 checked=autostart.is_enabled()),
+            Item("Quit", self.quit_app),
+        ]
+        return items
+
+    def _tray_rainbow(self):
+        if effect_info(self.state.effect).color:
+            self.rainbow_row.set_active(not self.rainbow_row.get_active())
+        else:
+            self.effect_row.set_selected(self._effect_index(3))  # Rainbow wave
+
+    def _toggle_autostart(self):
+        if autostart.is_enabled():
+            autostart.disable()
+        else:
+            autostart.enable()
+        self._tray_refresh()
+
+    def _tray_refresh(self):
+        if not self.tray:
+            return
+        percent = getattr(self.battery, "percent", None)
+        label = f"{percent}%" if percent is not None and self.kb else ""
+        tooltip = self.kb.description if self.kb else "Keyboard not connected"
+        self.tray.refresh(label=label, tooltip=tooltip)
 
     # ------------------------------------------------------------------ connection
 
@@ -561,12 +650,14 @@ class Window(Adw.ApplicationWindow):
         self.battery_row.set_subtitle(text)
         suffix = f" · Battery {battery}" if battery is not None else ""
         self.status_label.set_label(self.kb.description + suffix)
+        self._tray_refresh()
 
     # ------------------------------------------------------------------ power
 
     def _sleep_changed(self):
         keep_on = self.keep_on_row.get_active()
         self.sleep_row.set_sensitive(self.kb is not None and not keep_on and self.music is None)
+        self._tray_refresh()
         if self._loading or not self.kb:
             return
         minutes = 0 if keep_on else SLEEP_MINUTES[self.sleep_row.get_selected()]
@@ -645,6 +736,7 @@ class Window(Adw.ApplicationWindow):
         else:
             self.music_row.set_subtitle("Starting…" if self._music_starting else
                                         "Stopped" if self.kb else "Connect the keyboard first")
+        self._tray_refresh()
 
     def _pick_preset(self, rgb):
         self.color_button.set_rgba(_rgba(rgb))
@@ -739,13 +831,40 @@ class Window(Adw.ApplicationWindow):
 
 
 class App(Adw.Application):
-    def __init__(self):
+    def __init__(self, background=False):
         super().__init__(application_id=APP_ID)
+        self._background = background
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        # "quit" is reachable over D-Bus, so installers can stop a running copy:
+        # gdbus call --session --dest io.github.aula_f87.Control \
+        #   --object-path /io/github/aula_f87/Control --method org.gtk.Actions.Activate quit [] {}
+        action = Gio.SimpleAction.new("quit", None)
+        action.connect("activate", lambda *_: self._quit())
+        self.add_action(action)
+
+    def _quit(self):
+        windows = self.get_windows()
+        if windows:
+            windows[0].quit_app()
+        else:
+            self.quit()
 
     def do_activate(self):
-        window = self.props.active_window or Window(self)
-        window.present()
+        windows = self.get_windows()
+        window = windows[0] if windows else Window(self)
+        if self._background and not windows:
+            # Started at login: stay in the top bar. Opening the app again shows the window.
+            self._background = False
+            return
+        window.show_window()
 
 
-def main():
-    return App().run(sys.argv[:1])
+def main(background=False):
+    app = App(background)
+    if background:
+        app.register(None)
+        if app.get_is_remote():
+            return 0  # already running; don't pop up a window at login
+    return app.run(sys.argv[:1])

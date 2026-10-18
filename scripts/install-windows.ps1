@@ -28,7 +28,7 @@ function Find-Python {
         $parts = $candidate -split ' '
         if (-not (Get-Command $parts[0] -ErrorAction SilentlyContinue)) { continue }
         $extra = @()
-        if ($parts.Length -gt 1) { $extra = $parts[1..($parts.Length - 1)] }
+        if ($parts.Length -gt 1) { $extra = @($parts[1..($parts.Length - 1)]) }
         try {
             # The Microsoft Store "python" placeholder fails here and is skipped.
             $out = & $parts[0] @extra -c 'import sys; print(sys.version_info >= (3, 10))' 2>$null
@@ -40,7 +40,7 @@ function Find-Python {
 
 function Invoke-Python([string[]]$Python, [string[]]$Arguments) {
     $extra = @()
-    if ($Python.Length -gt 1) { $extra = $Python[1..($Python.Length - 1)] }
+    if ($Python.Length -gt 1) { $extra = @($Python[1..($Python.Length - 1)]) }
     & $Python[0] @extra @Arguments
 }
 

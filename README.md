@@ -32,9 +32,12 @@ without AULA's own software.
 | Other AULA boards with the same USB IDs (`258a:010c` cable, `3554:fa09` receiver), e.g. F87, F87 TK, F75, F99 | may work | may work | ❌ |
 
 Tested on Ubuntu 26.04 with an F87 Pro, over both the cable and the 2.4G receiver. Per-key
-colors were only tested over the cable. The Windows version runs the same keyboard and audio
-code through `hidapi` and `soundcard`. That code path was tested on Linux, but not yet on a
-Windows PC, so reports are welcome.
+colors were only tested over the cable.
+
+The Windows version runs the same keyboard and audio code through `hidapi` and `soundcard`.
+That code path was tested with the keyboard on Linux. CI checks on Windows that the installer
+works and the window opens, but the app hasn't been used with a keyboard on a Windows PC yet,
+so reports are welcome.
 
 ## Install
 

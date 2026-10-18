@@ -14,6 +14,7 @@ import traceback
 from tkinter import colorchooser, font as tkfont, ttk
 
 from . import device
+from .settings import Settings
 from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES, SLEEP_MINUTES,
                       Effect, battery_text, effect_info, nearest_sleep_index, sleep_label)
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U
@@ -198,7 +199,9 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("AULA F87 Control")
-        self.geometry("1040x800")
+        self.settings = Settings()
+        width, height = self.settings["window"]
+        self.geometry(f"{max(width, 820)}x{max(height, 640)}")
         self.minsize(820, 640)
         style = ttk.Style(self)
         if sys.platform.startswith("linux") and "clam" in style.theme_names():
@@ -208,7 +211,7 @@ class App(tk.Tk):
         self.kb = None
         self.state = device.Lighting()
         self.keys = [(0, 0, 0)] * device.PLANE
-        self.brush = (255, 0, 0)
+        self.brush = tuple(self.settings["brush"])
         self.color = (255, 255, 255)
         self._effects = list(EFFECTS)
         self._loading = False
@@ -235,6 +238,10 @@ class App(tk.Tk):
         self.tabs.add(self._lighting_tab(), text="  Lighting  ")
         self.tabs.add(self._per_key_tab(), text="  Per-key colors  ")
         self.tabs.add(self._music_tab(), text="  Music sync  ")
+        self._tab_names = ["lighting", "per-key", "music"]
+        self.tabs.select(self._tab_names.index(self.settings["tab"]))
+        self.tabs.bind("<<NotebookTabChanged>>", lambda _e: self.settings.__setitem__(
+            "tab", self._tab_names[self.tabs.index(self.tabs.select())]))
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._sync_widgets()
@@ -369,19 +376,19 @@ class App(tk.Tk):
         ttk.Label(form, text="Style").grid(row=1, column=0, sticky="w", pady=6)
         self.music_style_box = ttk.Combobox(form, state="readonly", width=28,
                                             values=list(MUSIC_STYLES))
-        self.music_style_box.current(0)
+        self.music_style_box.current(self.settings["music_style"])
         self.music_style_box.bind("<<ComboboxSelected>>", lambda _e: self._music_settings())
         self.music_style_box.grid(row=1, column=1, sticky="w", padx=12)
 
         ttk.Label(form, text="Sensitivity").grid(row=2, column=0, sticky="w", pady=6)
         self.sensitivity = LevelScale(form, 0.5, 2.0, 0.1, self._music_settings, fmt="{:.1f}")
-        self.sensitivity.set(1.0)
+        self.sensitivity.set(self.settings["music_sensitivity"])
         self.sensitivity.grid(row=2, column=1, sticky="w", padx=12)
 
         ttk.Label(form, text="Brightness").grid(row=3, column=0, sticky="w", pady=6)
         self.music_brightness = LevelScale(form, 0.1, 1.0, 0.05, self._music_settings,
                                            fmt="{:.0%}")
-        self.music_brightness.set(1.0)
+        self.music_brightness.set(self.settings["music_brightness"])
         self.music_brightness.grid(row=3, column=1, sticky="w", padx=12)
         return tab
 
@@ -414,6 +421,8 @@ class App(tk.Tk):
             self._show_battery(battery)
             self._sync_widgets()
             self.paint_view.refresh()
+            if self.settings["music_on"] and not self.music and not self._music_starting:
+                self._start_music()  # it was on last time (or before the keyboard dropped out)
 
         def failed(exc):
             self._connecting = False
@@ -472,6 +481,8 @@ class App(tk.Tk):
                            self._io_failed)
 
     def _on_close(self):
+        if self.wm_state() == "normal":  # (self.state is the lighting state here)
+            self.settings["window"] = [self.winfo_width(), self.winfo_height()]
         if self.music:
             self.music.stop()
             self.music = None
@@ -630,6 +641,7 @@ class App(tk.Tk):
     def _set_brush(self, rgb):
         self.brush = tuple(rgb)
         self.brush_swatch.set(self.brush)
+        self.settings["brush"] = self.brush
 
     def _paint_key(self, led, erase=False):
         color = (0, 0, 0) if erase else self.brush
@@ -664,12 +676,18 @@ class App(tk.Tk):
     # ------------------------------------------------------------------ music
 
     def _toggle_music(self):
+        """Start/stop chosen by the user; remembered so it resumes next time."""
         if self.music:
+            self.settings["music_on"] = False
             self._stop_music()
         else:
+            self.settings["music_on"] = True
             self._start_music()
 
     def _music_settings(self):
+        self.settings["music_style"] = max(0, self.music_style_box.current())
+        self.settings["music_sensitivity"] = self.sensitivity.get()
+        self.settings["music_brightness"] = self.music_brightness.get()
         if self.music:
             self.music.style = max(0, self.music_style_box.current())
             self.music.sensitivity = self.sensitivity.get()
@@ -709,6 +727,7 @@ class App(tk.Tk):
 
         def failed(exc):
             self._music_starting = False
+            self.settings["music_on"] = False  # don't retry a start that can't work
             self._sync_widgets()
             self._toast(f"Couldn't start music sync: {exc}")
 

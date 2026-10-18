@@ -14,6 +14,7 @@ gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
 from . import autostart, device  # noqa: E402
+from .settings import Settings  # noqa: E402
 from .tray import SEPARATOR, Item  # noqa: E402
 from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES,  # noqa: E402
                       SLEEP_MINUTES, Effect, battery_text, effect_info, nearest_sleep_index,
@@ -183,13 +184,14 @@ def _level_scale(on_change):
 
 class Window(Adw.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app, title="AULA F87 Control",
-                         default_width=1060, default_height=820)
+        super().__init__(application=app, title="AULA F87 Control")
+        self.settings = Settings()
+        self.set_default_size(*self.settings["window"])
         self.kb = None
         self.worker = Worker()
         self.state = device.Lighting()
         self.keys = [(0, 0, 0)] * device.PLANE
-        self.brush = (255, 0, 0)
+        self.brush = tuple(self.settings["brush"])
         self._effects = list(EFFECTS)
         self._loading = False
         self._connecting = False
@@ -210,6 +212,9 @@ class Window(Adw.ApplicationWindow):
         stack.add_titled_with_icon(self._music_page(), "music", "Music sync",
                                    "audio-x-generic-symbolic")
         self.toasts.set_child(stack)
+        stack.set_visible_child_name(self.settings["tab"])
+        stack.connect("notify::visible-child-name",
+                      lambda st, _p: self.settings.__setitem__("tab", st.get_visible_child_name()))
 
         header = Adw.HeaderBar(title_widget=Adw.ViewSwitcher(
             stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE))
@@ -343,8 +348,7 @@ class Window(Adw.ApplicationWindow):
         self.brush_button = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False),
                                                   rgba=_rgba(self.brush),
                                                   valign=Gtk.Align.CENTER)
-        self.brush_button.connect("notify::rgba",
-                                  lambda b, _p: setattr(self, "brush", _rgb(b.get_rgba())))
+        self.brush_button.connect("notify::rgba", lambda b, _p: self._set_brush(_rgb(b.get_rgba())))
         tools.append(self.brush_button)
         for name, rgb in PRESETS:
             tools.append(_swatch(name, rgb, lambda c: self.brush_button.set_rgba(_rgba(c))))
@@ -389,13 +393,16 @@ class Window(Adw.ApplicationWindow):
 
         self.music_style_row = Adw.ComboRow(title="Style",
                                             model=Gtk.StringList.new(list(MUSIC_STYLES)))
+        self.music_style_row.set_selected(self.settings["music_style"])
         self.music_style_row.connect("notify::selected", lambda *_: self._music_settings())
         group.add(self.music_style_row)
 
         self.sensitivity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
         self.brightness_music = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.1, 1.0, 0.05)
-        for scale, value, marks in ((self.sensitivity, 1.0, (0.5, 1.0, 1.5, 2.0)),
-                                    (self.brightness_music, 1.0, (0.25, 0.5, 0.75, 1.0))):
+        for scale, value, marks in ((self.sensitivity, self.settings["music_sensitivity"],
+                                     (0.5, 1.0, 1.5, 2.0)),
+                                    (self.brightness_music, self.settings["music_brightness"],
+                                     (0.25, 0.5, 0.75, 1.0))):
             scale.set_value(value)
             scale.set_draw_value(False)
             scale.set_size_request(240, -1)
@@ -414,13 +421,23 @@ class Window(Adw.ApplicationWindow):
 
     # ------------------------------------------------------------------ music
 
+    def _set_brush(self, rgb):
+        self.brush = rgb
+        self.settings["brush"] = rgb
+
     def _toggle_music(self):
+        """Start/stop chosen by the user; remembered so it resumes next time."""
         if self.music:
+            self.settings["music_on"] = False
             self._stop_music()
         else:
+            self.settings["music_on"] = True
             self._start_music()
 
     def _music_settings(self):
+        self.settings["music_style"] = self.music_style_row.get_selected()
+        self.settings["music_sensitivity"] = round(self.sensitivity.get_value(), 2)
+        self.settings["music_brightness"] = round(self.brightness_music.get_value(), 2)
         self._tray_refresh()
         if self.music:
             self.music.style = self.music_style_row.get_selected()
@@ -454,6 +471,7 @@ class Window(Adw.ApplicationWindow):
 
         def failed(exc):
             self._music_starting = False
+            self.settings["music_on"] = False  # don't retry a start that can't work
             self._sync_widgets()
             self.toasts.add_toast(Adw.Toast(title=f"Couldn't start music sync: {exc}", timeout=6))
 
@@ -492,9 +510,14 @@ class Window(Adw.ApplicationWindow):
             self._disconnected("Lost connection to the keyboard.")
         self.toasts.add_toast(Adw.Toast(title=f"Music sync stopped: {exc}", timeout=6))
 
+    def _remember_size(self):
+        if self.get_visible() and not self.is_maximized() and self.get_width() > 0:
+            self.settings["window"] = [self.get_width(), self.get_height()]
+
     def _on_close(self, *_):
         # With the top-bar icon showing, closing the window keeps the app (and
         # music sync) running in the background; "Quit" in the icon's menu ends it.
+        self._remember_size()
         if self.tray and self.tray.available:
             self.set_visible(False)
             return True
@@ -502,6 +525,7 @@ class Window(Adw.ApplicationWindow):
         return False
 
     def _shutdown(self):
+        self._remember_size()
         if self.music:
             self.music.stop()
             self.music = None
@@ -608,6 +632,8 @@ class Window(Adw.ApplicationWindow):
             self._show_battery(battery)
             self._sync_widgets()
             self.paint_view.queue_draw()
+            if self.settings["music_on"] and not self.music and not self._music_starting:
+                self._start_music()  # it was on last time (or before the keyboard dropped out)
 
         def failed(exc):
             self._connecting = False

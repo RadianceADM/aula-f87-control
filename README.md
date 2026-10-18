@@ -142,6 +142,19 @@ The Ubuntu app uses GTK and looks native on GNOME. Windows and macOS get a simpl
 the same tabs and features, but without the top-bar icon and without starting at login. On Linux you can open that one too, with `aula-f87-control gui --tk`
 (needs `python3-tk`).
 
+### What is saved where
+
+- **In the keyboard:** lighting, per-key colors, side lights and the sleep timer. These stay
+  when you unplug the keyboard or use another computer.
+- **On this computer:** whether music sync is on, its style, sensitivity and brightness, the
+  last tab, the brush color and the window size.
+  - Linux: `~/.config/aula-f87-control/settings.json`
+  - Windows: `%APPDATA%\aula-f87-control\settings.json`
+
+  If music sync was on when you quit, it starts again the next time the app starts. It also
+  restarts when the keyboard comes back after being unplugged or asleep. Press **Stop** to
+  keep it off.
+
 ### Lighting
 
 - **Lighting effect.** Pick one of the built-in effects. *Custom per-key* shows your painted keys.
@@ -332,6 +345,7 @@ AULA_F87_AUDIO=soundcard python3 -m aula_f87 music  # use the Windows/macOS audi
 | `aula_f87/gui_tk.py` | Tkinter app (Windows, macOS, and the Linux fallback) |
 | `aula_f87/tray.py` | Top-bar icon: StatusNotifierItem and dbusmenu over D-Bus |
 | `aula_f87/autostart.py` | Start at login (freedesktop autostart) |
+| `aula_f87/settings.py` | App preferences kept on the computer |
 | `aula_f87/data/` | App icon and top-bar icon |
 | `aula_f87/effects.py`, `layout.py` | Effect list, presets, key positions and LED numbers |
 | `aula_f87/__main__.py` | Command line and window selection |

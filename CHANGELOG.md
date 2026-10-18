@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1 — 2026-10-19
+
+- **App settings are saved now.** The app remembers whether music sync is on, its style,
+  sensitivity and brightness, the last tab, the brush color and the window size, in
+  `settings.json`. If music sync was on, it starts again with the app, including at login,
+  and again when the keyboard comes back. Pressing **Stop** keeps it off.
+
 ## v0.3.0 — 2026-10-19
 
 - **Top-bar icon (Linux).** A quick menu for music sync and its style, keep backlight on,

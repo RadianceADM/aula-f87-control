@@ -197,8 +197,11 @@ class Window(Adw.ApplicationWindow):
         self._loading = False
         self._connecting = False
         self._apply_source = 0
+        self._apply_queued = False
+        self._damaged = False   # the keyboard's stored settings need Repair
         self.music = None
         self._music_starting = False
+        self._music_cancel = False  # window closed while music sync was starting
         self._music_colors = [(0, 0, 0)] * device.PLANE
         self._music_draw_pending = False
         self._polls = 0
@@ -231,7 +234,8 @@ class Window(Adw.ApplicationWindow):
         header.pack_end(self.refresh_button)
 
         self.banner = Adw.Banner(button_label="Retry")
-        self.banner.connect("button-clicked", lambda *_: self.connect_keyboard())
+        self.banner.connect("button-clicked", lambda *_: self._repair() if self._damaged
+                            else self.connect_keyboard())
 
         view = Adw.ToolbarView(content=self.toasts)
         view.add_top_bar(header)
@@ -497,6 +501,7 @@ class Window(Adw.ApplicationWindow):
         if not self.kb or self._music_starting:
             return
         self._music_starting = True
+        self._music_cancel = False
         self._sync_widgets()
         link = self.kb.link
 
@@ -511,7 +516,7 @@ class Window(Adw.ApplicationWindow):
 
         def done(sync):
             self._music_starting = False
-            if sync.running:  # it may already have failed and reported why
+            if sync.running and not self._music_cancel:  # it may already have failed
                 self.music = sync
                 self._music_settings()
             else:
@@ -564,10 +569,14 @@ class Window(Adw.ApplicationWindow):
             self.settings["window"] = [self.get_width(), self.get_height()]
 
     def _on_close(self, *_):
-        # With the top-bar icon showing, closing the window keeps the app (and
-        # music sync) running in the background; "Quit" in the icon's menu ends it.
+        # Closing the window stops music sync, so the keyboard goes back to its
+        # own lighting within a second. With the top-bar icon showing, the app
+        # stays there (music sync can be started from its menu); "Quit" ends it.
         self._remember_size()
         if self.tray and self.tray.available:
+            if self.music:
+                self._stop_music()  # resumes when the window is opened again
+            self._music_cancel = self._music_starting
             self.set_visible(False)
             return True
         self._shutdown()
@@ -585,6 +594,14 @@ class Window(Adw.ApplicationWindow):
     def show_window(self):
         self.set_visible(True)
         self.present()
+        self._resume_music()
+
+    def _resume_music(self):
+        """Music sync was on when the window was last open (or before the
+        keyboard dropped out): start it again."""
+        if (self.settings["music_on"] and self.kb and self.get_visible()
+                and not self.music and not self._music_starting):
+            self._start_music()
 
     def quit_app(self):
         self._shutdown()
@@ -597,6 +614,8 @@ class Window(Adw.ApplicationWindow):
         editable = connected and self.music is None and not self._music_starting
         header = self.kb.description if connected else "Keyboard not connected"
         items = [Item(header, enabled=False)]
+        if self._damaged:
+            items.append(Item("Repair keyboard settings", self._repair))
         if connected and self.battery is not None:
             items.append(Item(f"Battery: {battery_text(self.battery, False)}", enabled=False))
         items += [
@@ -656,7 +675,9 @@ class Window(Adw.ApplicationWindow):
             return
         percent = getattr(self.battery, "percent", None)
         label = f"{percent}%" if percent is not None and self.kb else ""
-        tooltip = self.kb.description if self.kb else "Keyboard not connected"
+        tooltip = (self.kb.description if self.kb else
+                   "Keyboard settings damaged: open to repair" if self._damaged else
+                   "Keyboard not connected")
         self.tray.refresh(label=label, tooltip=tooltip)
 
     # ------------------------------------------------------------------ connection
@@ -688,25 +709,56 @@ class Window(Adw.ApplicationWindow):
             self._show_battery(battery)
             self._sync_widgets()
             self.paint_view.queue_draw()
-            if self.settings["music_on"] and not self.music and not self._music_starting:
-                self._start_music()  # it was on last time (or before the keyboard dropped out)
+            self._resume_music()
 
         def failed(exc):
             self._connecting = False
-            self._disconnected(str(exc))
+            self._disconnected(str(exc), isinstance(exc, device.DamagedSettings))
 
         self.worker.submit(job, done, failed)
 
-    def _disconnected(self, message):
+    def _disconnected(self, message, damaged=False):
         if self.kb:
             # Close on the worker so jobs already queued for this handle finish first.
             self.worker.submit(self.kb.close)
             self.kb = None
-        self.status_label.set_label("Not connected")
+        if damaged and not self._damaged:
+            self.show_window()  # the keyboard may not type until this is fixed
+        self._damaged = damaged
+        self.status_label.set_label("Settings damaged" if damaged else "Not connected")
         self.battery_row.set_subtitle("—")
         self.banner.set_title(message)
+        self.banner.set_button_label("Repair" if damaged else "Retry")
         self.banner.set_revealed(True)
         self._sync_widgets()
+
+    def _repair(self):
+        """Write the keyboard's last good settings back (see Keyboard.repair)."""
+        if self._connecting:
+            return
+        self._connecting = True  # no reconnect attempts meanwhile
+        self.banner.set_revealed(False)
+        self.status_label.set_label("Repairing…")
+
+        def job():
+            kb = device.connect()
+            try:
+                return kb.repair()
+            finally:
+                kb.close()
+
+        def done(used):
+            self._connecting = False
+            self._damaged = False
+            self.toasts.add_toast(Adw.Toast(title=f"Repaired: put back the keyboard's {used}",
+                                            timeout=5))
+            self.connect_keyboard()
+
+        def failed(exc):
+            self._connecting = False
+            self._disconnected(f"Repair failed: {exc}", damaged=True)
+
+        self.worker.submit(job, done, failed)
 
     def _poll(self):
         self._polls += 1
@@ -850,13 +902,22 @@ class Window(Adw.ApplicationWindow):
 
     def _apply_lighting(self):
         self._apply_source = 0
-        if not self.kb:
-            return False
-        kb, state = self.kb, self.state
-        self.worker.submit(lambda: kb.apply_lighting(state), None, self._io_failed)
+        if not self.kb or self._apply_queued:
+            return False  # a queued job will send the newest state
+        self._apply_queued = True
+        kb = self.kb
+
+        def job():  # worker thread
+            self._apply_queued = False
+            kb.apply_lighting(self.state)
+
+        self.worker.submit(job, None, self._io_failed)
         return False
 
     def _io_failed(self, exc):
+        if isinstance(exc, device.DamagedSettings):
+            self._disconnected(str(exc), damaged=True)
+            return
         if isinstance(exc, OSError) or (self.kb and not self.kb.alive):
             self._disconnected("Lost connection to the keyboard.")
         self.toasts.add_toast(Adw.Toast(title=f"Couldn't update the keyboard: {exc}", timeout=5))

@@ -68,6 +68,111 @@ class DeviceError(Exception):
     pass
 
 
+class DamagedSettings(DeviceError):
+    """The keyboard's stored settings don't look valid (see config_ok)."""
+
+
+# Bytes that are the same in every healthy config seen: the F87 Pro's, and the
+# factory template of the newer F87. A read without them is not a real config.
+# Either the keyboard answered with something else (e.g. a stale buffer right
+# after a write), or its stored settings are damaged. Writing such data back is
+# what can stop the keyboard from typing, so it is never done.
+_CFG_FIXED = {1: 0x03, 2: 0x03, 6: 0x04, 7: 0x04, 8: 0x07, 11: 0x20,
+              56: 0xFF, 57: 0xFF, 126: 0x5A, 127: 0xA5}
+
+
+def config_ok(cfg):
+    if cfg is None or len(cfg) < CFG_LEN or not all(cfg[i] == v for i, v in _CFG_FIXED.items()):
+        return False
+    for effect in range(1, 19):  # brightness 0-4, speed 0-4, colour slot 0-7
+        p = param_offset(effect)
+        if cfg[p] > 4 or cfg[p + 1] >> 4 > 4 or cfg[p + 1] & 0x0F > 7:
+            return False
+    return True
+
+
+def palette_ok(pal):
+    """Effect 0 (off) has no colours and the block ends with the 5A A5 marker."""
+    return pal is not None and len(pal) >= PAL_LEN and not any(pal[0:21]) \
+        and pal[506:508] == b"\x5a\xa5"
+
+
+# Healthy settings read from an F87 Pro (Colorful waterfall, side lights on,
+# backlight sleeps after 5 minutes). Repair writes this only when the app has
+# never seen good settings on this computer; otherwise it puts back the last
+# good settings it read from the keyboard.
+DEFAULT_CONFIG = bytes.fromhex(
+    "00030302000004040700102001000000"
+    "00000103010200ff0a00000103010401"
+    "00000000000000000000000000000000"
+    "0000000000000000ffff043704370437"
+    "04370437043701370437043704370430"
+    "04310437043704070437043704370437"
+    "04370747074707440744074407440744"
+    "07440744040404040404040404045aa5")
+assert len(DEFAULT_CONFIG) == CFG_LEN
+
+
+class DeviceLock:
+    """One program at a time: a lock file shared by the app, its music sync and
+    the command line, so two of them never talk to the keyboard at once."""
+
+    def __init__(self):
+        if sys.platform == "win32":
+            base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+        else:
+            base = Path(os.environ.get("XDG_RUNTIME_DIR") or
+                        os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+        self.path = base / "aula-f87-control.lock"
+        self._file = None
+
+    def acquire(self, timeout=3.0):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._file = open(self.path, "a+")
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    self._file.seek(0)
+                    msvcrt.locking(self._file.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self._file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except OSError:
+                if time.monotonic() > deadline:
+                    self._file.close()
+                    self._file = None
+                    return False
+                time.sleep(0.05)
+
+    def release(self):
+        f, self._file = self._file, None
+        if f is None:
+            return
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+    def __enter__(self):
+        if not self.acquire():
+            raise DeviceError("Another program (or this app's music sync) is using the keyboard "
+                              "right now. Stop it and try again.")
+        return self
+
+    def __exit__(self, *_):
+        self.release()
+
+
 # --------------------------------------------------------------------------- transports
 
 _TRANSIENT = {errno.EPROTO, errno.EPIPE, errno.ETIMEDOUT, errno.EAGAIN}
@@ -116,13 +221,21 @@ class WiredLink:
 
     def _read(self, cmd, length):
         resp = self._request(self._header(cmd | 0x80, length))
-        if len(resp) < 8 + length or resp[1] != cmd | 0x80:
+        if len(resp) < 8 + length or resp[1] != cmd | 0x80 or resp[6] | resp[7] << 8 != length:
             raise DeviceError("The keyboard sent an unexpected reply over USB. Is another program "
                               "(or this app's music sync) using it right now?")
         return bytearray(resp[8:8 + length])
 
+    # Writes are spaced out: the keyboard stores each block in flash, and
+    # hurrying it (a write straight after a read, or right after another write)
+    # has made it restart in the middle of one.
+    WRITE_PAUSE = 0.2
+    WRITE_SETTLE = 0.35
+
     def _write(self, cmd, body):
+        time.sleep(self.WRITE_PAUSE)
         self._retry(lambda: self._set(self._header(cmd, len(body)) + bytes(body)))
+        time.sleep(self.WRITE_SETTLE)
 
     def probe(self):
         # Few attempts: on Windows the wrong HID collections are tried too, and
@@ -394,16 +507,100 @@ class Keyboard:
     def close(self):
         self.link.close()
 
-    def _palette(self):
-        if self.link.can_read_blocks:
+    # ---------------------------------------------------------------- safe access
+    #
+    # Rules that keep the keyboard's stored settings intact:
+    # * every block read is checked (config_ok / palette_ok) before it's used;
+    # * nothing that fails the check is ever written, and unchanged blocks
+    #   aren't rewritten;
+    # * after a write the settings are read back, and if they came out damaged
+    #   the previous ones are put back straight away;
+    # * one program talks to the keyboard at a time (DeviceLock).
+
+    def _read_config(self):
+        for attempt in range(4):
+            try:
+                cfg = self.link.read_config()
+            except DeviceError:
+                if attempt:
+                    raise
+                cfg = None  # e.g. the reply to an earlier request; ask once more
+            if config_ok(cfg):
+                self.cache.put("good_config", cfg)
+                return cfg
+            time.sleep(0.25 * (attempt + 1))  # may be a stale reply; ask again
+        raise DamagedSettings(
+            "The keyboard's saved settings look damaged, which can stop it from typing. "
+            "Repair puts back its last good settings.")
+
+    def _device_palette(self):
+        """The palette stored in the keyboard, or None if it can't be read
+        (2.4G) or looks damaged."""
+        if not self.link.can_read_blocks:
+            return None
+        for attempt in range(3):
             pal = self.link.read_palette()
+            if palette_ok(pal):
+                self.cache.put("palette", pal)
+                return pal
+            time.sleep(0.25 * (attempt + 1))
+        return None
+
+    def _good_config(self):
+        good = self.cache.get("good_config", CFG_LEN)
+        return good if config_ok(good) else bytearray(DEFAULT_CONFIG)
+
+    def _good_palette(self):
+        pal = self.cache.get("palette", PAL_LEN)
+        return pal if palette_ok(pal) else _default_palette()
+
+    def _store(self, cfg, before_cfg, pal=None, before_pal=None, keys=None):
+        """Write what changed, then make sure the keyboard's settings are still
+        intact; if not, put the previous ones back."""
+        cfg[CFG_CUSTOM] = 1 if cfg[CFG_EFFECT] == PER_KEY else 0
+        if not config_ok(cfg) or (pal is not None and not palette_ok(pal)):
+            raise DeviceError("Not writing: the new settings don't look valid.")
+        write_pal = pal is not None and (before_pal is None or bytes(pal) != bytes(before_pal))
+        if keys is None and not write_pal and bytes(cfg) == bytes(before_cfg):
+            return  # nothing changed
+        if keys is not None:
+            self.link.write_keys(cfg, keys)
+        elif write_pal:
+            self.link.write_lighting(cfg, pal)
+        else:
+            self.link.write_config(cfg)
+        try:
+            self._read_config()
+            if write_pal and self.link.can_read_blocks and self._device_palette() is None:
+                raise DamagedSettings("palette")
+        except DamagedSettings:
+            time.sleep(1.0)
+            self._put_back(before_cfg, before_pal or self._good_palette())
+            raise DeviceError("The keyboard didn't store that change properly, so its previous "
+                              "settings were put back. Try again in a moment.") from None
+        if pal is not None:
             self.cache.put("palette", pal)
-            return pal
-        return self.cache.get("palette", PAL_LEN) or _default_palette()
+
+    def _put_back(self, cfg, pal):
+        cfg = bytearray(cfg)
+        cfg[CFG_CUSTOM] = 1 if cfg[CFG_EFFECT] == PER_KEY else 0
+        self.link.write_lighting(cfg, pal)
+        self._read_config()  # raises DamagedSettings if even that didn't take
+
+    def repair(self):
+        """Put back this keyboard's last good settings, or DEFAULT_CONFIG if
+        none were saved on this computer. Returns which one was used."""
+        saved = config_ok(self.cache.get("good_config", CFG_LEN))
+        with DeviceLock():
+            self._put_back(self._good_config(), self._good_palette())
+        return "last good settings" if saved else "default settings"
+
+    # ---------------------------------------------------------------- operations
 
     def read_lighting(self):
-        cfg = self.link.read_config()
-        pal = self._palette()
+        with DeviceLock():
+            cfg = self._read_config()
+            pal = self._device_palette() or self._good_palette()
         state = Lighting(effect=cfg[CFG_EFFECT], side=cfg[CFG_SIDE], sleep=cfg[CFG_SLEEP] / 2)
         if 1 <= state.effect <= 18:
             p = param_offset(state.effect)
@@ -417,33 +614,41 @@ class Keyboard:
         return state
 
     def apply_lighting(self, state):
-        cfg = self.link.read_config()
-        pal = self._palette()
-        info = effect_info(state.effect)
-        cfg[CFG_EFFECT] = state.effect
-        cfg[CFG_CUSTOM] = 1 if state.effect == PER_KEY else 0
-        cfg[CFG_COLOR_MODE] = 1
-        cfg[CFG_SIDE] = state.side
-        if 1 <= state.effect <= 18:
-            p = param_offset(state.effect)
-            cfg[p] = max(0, min(4, state.brightness))
-            speed = max(0, min(4, state.speed)) if info.speed else cfg[p + 1] >> 4
-            slot = cfg[p + 1] & 0x0F
-            if info.color:
-                slot = COLORFUL if state.colorful else 0
-                if not state.colorful:
-                    o = slot_offset(state.effect)
-                    pal[o:o + 3] = bytes(state.color)
-            cfg[p + 1] = (speed << 4) | slot
-        self.link.write_lighting(cfg, pal)
-        self.cache.put("palette", pal)
+        with DeviceLock():
+            before_cfg = self._read_config()
+            # None over 2.4G (can't be read) or if damaged: then it is always sent.
+            before_pal = self._device_palette()
+            cfg = bytearray(before_cfg)
+            pal = bytearray(before_pal or self._good_palette())
+            info = effect_info(state.effect)
+            cfg[CFG_EFFECT] = state.effect
+            cfg[CFG_COLOR_MODE] = 1
+            cfg[CFG_SIDE] = state.side
+            if 1 <= state.effect <= 18:
+                p = param_offset(state.effect)
+                cfg[p] = max(0, min(4, state.brightness))
+                speed = max(0, min(4, state.speed)) if info.speed else cfg[p + 1] >> 4
+                slot = cfg[p + 1] & 0x0F
+                if info.color:
+                    slot = COLORFUL if state.colorful else 0
+                    if not state.colorful:
+                        o = slot_offset(state.effect)
+                        pal[o:o + 3] = bytes(state.color)
+                cfg[p + 1] = (speed << 4) | slot
+            self._store(cfg, before_cfg, pal, before_pal)
 
     def read_battery(self):
         """Battery over 2.4G as a Battery, or None (USB cable / no reply).
 
         The keyboard only reports its level over 2.4G, and only while the cable
         is unplugged, so the last real reading is remembered (see last_battery)."""
-        battery = self.link.read_battery()
+        lock = DeviceLock()
+        if not lock.acquire(timeout=0.5):
+            return None  # busy (e.g. music sync); try again next time
+        try:
+            battery = self.link.read_battery()
+        finally:
+            lock.release()
         if battery is not None and battery.percent is not None:
             self.cache.put_value("battery", {"percent": battery.percent, "time": time.time()})
         return battery
@@ -459,13 +664,16 @@ class Keyboard:
     def set_sleep(self, minutes):
         """Idle minutes before the keyboard turns its backlight off; 0 = never.
         Stored in the keyboard (one write), so it also applies without this app."""
-        cfg = self.link.read_config()
-        cfg[CFG_SLEEP] = max(0, min(255, round(minutes * 2)))
-        self.link.write_config(cfg)
+        with DeviceLock():
+            before = self._read_config()
+            cfg = bytearray(before)
+            cfg[CFG_SLEEP] = max(0, min(255, round(minutes * 2)))
+            self._store(cfg, before)
 
     def read_keys(self):
         if self.link.can_read_blocks:
-            keys = self.link.read_keys()
+            with DeviceLock():
+                keys = self.link.read_keys()
             self.cache.put("keys", keys)
         else:
             keys = self.cache.get("keys", KEYS_LEN) or bytearray(KEYS_LEN)
@@ -475,16 +683,22 @@ class Keyboard:
         keys = bytearray(KEYS_LEN)
         for i, (r, g, b) in enumerate(colors[:PLANE]):
             keys[i], keys[PLANE + i], keys[2 * PLANE + i] = r, g, b
-        cfg = self.link.read_config()
-        cfg[CFG_EFFECT] = PER_KEY
-        cfg[CFG_CUSTOM] = 1
-        cfg[CFG_COLOR_MODE] = 1
-        self.link.write_keys(cfg, keys)
+        with DeviceLock():
+            before = self._read_config()
+            cfg = bytearray(before)
+            cfg[CFG_EFFECT] = PER_KEY
+            cfg[CFG_COLOR_MODE] = 1
+            self._store(cfg, before, keys=keys)
         self.cache.put("keys", keys)
 
 
 def connect():
     """Open the keyboard over USB if possible, otherwise over the 2.4G receiver."""
+    with DeviceLock():
+        return _connect()
+
+
+def _connect():
     problems = []
     # (link, USB id, report ID it needs, vendor usage pages to try first)
     for link_cls, usb_id, report_id, pages in ((WiredLink, WIRED_ID, 0x06, [0xFF00]),

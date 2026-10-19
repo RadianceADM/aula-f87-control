@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.1 — 2026-10-19
+
+- **The keyboard's stored settings are protected.** On an F87 Pro, they once got damaged after
+  the keyboard restarted in the middle of a write. The keyboard then stopped sending key presses
+  and its side lights flashed. The app now prevents this:
+  - Every settings block it reads is checked. Blocks that don't look like real settings are
+    read again, and are never written back.
+  - Only changed blocks are written, writes are spaced out, and the result is read back. If a
+    write left damaged settings behind, the previous ones are put back right away.
+  - Only one program talks to the keyboard at a time. The window, its music sync and the
+    command line take turns, so settings are never written while music sync streams.
+- **Repair.** If the keyboard's settings are damaged anyway, the app says so and offers
+  **Repair**: in the window, in the top-bar menu, or with `aula-f87-control repair`. It writes
+  back the last good settings this computer saw, or safe defaults.
+- **Closing the window stops music sync,** so the keyboard goes back to its own lighting. It
+  starts again when you open the window. The app still stays in the top bar.
+- Quick slider moves send one update instead of one per step.
+- Settings-safety tests run in CI on Linux and Windows.
+
 ## v0.4.0 — 2026-10-19
 
 - **Music sync: choose what to follow.** Tick **All**, or any of **Bass**, **Vocals** and

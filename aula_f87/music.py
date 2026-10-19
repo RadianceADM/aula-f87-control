@@ -24,7 +24,7 @@ import warnings
 
 import numpy as np
 
-from .device import PLANE
+from .device import PLANE, DeviceLock
 from .effects import MUSIC_STYLES as STYLES
 from .layout import KEYS, WIDTH_U
 
@@ -420,7 +420,16 @@ class MusicSync:
         self.follow = ()           # subset of FOLLOW_CHOICES; empty = everything
         self.frames = 0
         self._stop = threading.Event()
-        self._capture = open_capture()
+        # Held while streaming, so nothing writes the keyboard's settings
+        # (another copy of the app, the command line) in the middle of it.
+        self._lock = DeviceLock()
+        if not self._lock.acquire():
+            raise MusicError("Another program is using the keyboard right now.")
+        try:
+            self._capture = open_capture()
+        except BaseException:
+            self._lock.release()
+            raise
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -433,6 +442,7 @@ class MusicSync:
         if threading.current_thread() is not self._thread:
             self._thread.join(timeout=3)
         self._capture.close()
+        self._lock.release()
 
     def _run(self):
         analyzer = Analyzer()
@@ -455,6 +465,7 @@ class MusicSync:
                 self._stop.wait(max(0.0, period - (time.monotonic() - now)))
         except Exception as exc:  # reported to the caller
             self._capture.close()
+            self._lock.release()
             if self.on_error:
                 self.on_error(exc)
             else:

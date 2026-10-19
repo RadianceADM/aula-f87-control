@@ -1,4 +1,4 @@
-"""Entry point: ``aula-f87-control [gui|status|set|sleep|music] ...``.
+"""Entry point: ``aula-f87-control [gui|status|set|sleep|music|repair] ...``.
 
 Without a command it opens the window: the GTK 4 app on Linux, the Tkinter
 app on Windows/macOS (or on Linux with ``gui --tk`` / when GTK is missing).
@@ -89,6 +89,8 @@ def main(argv=None):
     m.add_argument("--follow", default="all",
                    help="what to react to: all, or a comma list of bass, vocals, beat")
     m.add_argument("--seconds", type=float, help="stop automatically after this long")
+    sub.add_parser("repair", help="put back the keyboard's last good settings "
+                                  "(if it stopped typing or its lights flash)")
     args = parser.parse_args(argv)
 
     if args.cmd in (None, "gui"):
@@ -109,6 +111,17 @@ def main(argv=None):
         return 1
     if args.cmd == "music":
         return _music(kb, args)
+    if args.cmd == "repair":
+        try:
+            used = kb.repair()
+            print(f"Put back the keyboard's {used}.")
+            _print_state(kb, kb.read_lighting())
+        except (device.DeviceError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        finally:
+            kb.close()
+        return 0
     if args.cmd == "sleep":
         try:
             minutes = 0.0 if args.when.lower() in ("never", "off", "0") else float(args.when)
@@ -130,6 +143,9 @@ def main(argv=None):
             kb.apply_lighting(state)
             state = kb.read_lighting()
         _print_state(kb, state)
+    except device.DamagedSettings as exc:
+        print(f"Error: {exc}\nRun: aula-f87-control repair", file=sys.stderr)
+        return 1
     except (device.DeviceError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

@@ -16,17 +16,21 @@ without AULA's own software.
   Changes are sent to the keyboard as you click.
 - **Per-key colors.** Paint individual keys on an on-screen keyboard.
 - **Music sync.** The keys move with whatever your computer is playing, from any app. Styles:
-  EQ bars, meter colors, rainbow, and beat pulse.
+  EQ bars, meter colors, rainbow, and beat pulse. Close the window and the keyboard goes back
+  to its own lighting.
 - **Battery level** (over 2.4G) and **sleep timer.** Keep the backlight always on, or choose
   when it turns off.
 - **Side lights** effect.
 - **Top-bar icon** (Linux). A quick menu for music sync, keep backlight on, colors, effects and
-  brightness, with the battery % next to the icon. It starts at login and keeps running when
-  you close the window.
+  brightness, with the battery % next to the icon. It starts at login and stays in the top bar
+  when you close the window.
 - Works over the **USB cable** and the **2.4G receiver**.
 - A **command line** for scripts and shortcuts.
 - Needs no drivers and no admin rights once set up. Settings are stored in the keyboard
   itself, so they stay when you unplug it or use another computer.
+- **Guards the keyboard's settings.** Every change is checked before it is written and read back
+  afterwards. If something goes wrong, the last good settings are put back. See
+  [Is it safe?](#is-it-safe)
 
 ## Supported keyboards
 
@@ -170,7 +174,11 @@ the same tabs and features, but without the top-bar icon and without starting at
   - Linux: `~/.config/aula-f87-control/settings.json`
   - Windows: `%APPDATA%\aula-f87-control\settings.json`
 
-  If music sync was on when you quit, it starts again the next time the app starts. It also
+  A copy of the keyboard's last good settings is kept next to it in `cache.json`. **Repair**
+  uses it (see [Troubleshooting](#troubleshooting)).
+
+  **Closing the window stops music sync,** and the keyboard goes back to its own lighting
+  within a second. If music sync was on, it starts again when you open the window. It also
   restarts when the keyboard comes back after being unplugged or asleep. Press **Stop** to
   keep it off.
 
@@ -200,10 +208,12 @@ The keyboard icon in the top bar gives you quick access without opening the wind
 | **Color**, **Effect**, **Brightness** | Quick lighting changes, the same as in the window |
 | **Open AULA F87 Control** | Shows the window. Launching the app from the app menu does the same. |
 | **Start at login** | Turns starting at login on or off |
+| **Repair keyboard settings** | Only shown when the keyboard's saved settings look damaged |
 | **Quit** | Stops the app, including music sync |
 
-Closing the window doesn't stop the app. It keeps running in the top bar, so music sync
-continues with the window closed. Use **Quit** in the menu to stop it.
+Closing the window stops music sync, so the keyboard shows its own lighting again. The app
+stays in the top bar. To keep music sync running with the window closed, start it from this menu.
+Use **Quit** to stop the app.
 
 The icon needs a top-bar tray. Ubuntu has one built in (the *Ubuntu AppIndicators*
 extension). On other GNOME systems, install *AppIndicator and KStatusNotifierItem Support*.
@@ -275,6 +285,7 @@ times per second, because the radio can't take frames any faster.
 | `aula-f87-control sleep never` | Keep the backlight always on |
 | `aula-f87-control sleep 10` | Backlight turns off after 10 idle minutes |
 | `aula-f87-control music --style bars --follow bass,beat` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. `--follow`: `all` (default) or any of `bass`, `vocals`, `beat`. Other options: `--sensitivity 0.5–2`, `--brightness 0.1–1`, `--seconds N` |
+| `aula-f87-control repair` | Put back the keyboard's last good settings (see [Troubleshooting](#troubleshooting)) |
 | `aula-f87-control gui --tk` | Open the simpler Tkinter window, even on Linux |
 | `aula-f87-control --background` | Start with only the top-bar icon. This is what runs at login. |
 
@@ -283,6 +294,13 @@ You can give `--effect` as a number or as the start of a name: `off`, `static`, 
 `rotating`, `colorful`, `blossoming`, `custom`.
 
 ## Troubleshooting
+
+**The keyboard stopped typing, or its side lights flash very fast.** The lights still work, but
+no key presses arrive. This means the settings stored in the keyboard got damaged. The app
+detects this, shows *The keyboard's saved settings look damaged* and offers **Repair**. Repair
+writes back the last good settings this computer saw, or safe defaults if it never saw any. From
+a terminal, run `aula-f87-control repair`. If the keyboard can't be reached at all, hold
+**Fn + Esc** for 3 seconds for AULA's factory reset.
 
 **"Permission denied on /dev/hidrawN" (Linux).** Install the udev rule from
 [Ubuntu / Debian](#ubuntu--debian-manual), then unplug and replug the keyboard or receiver.
@@ -320,8 +338,14 @@ reinstall with `./install.sh --no-autostart`.
 
 **Changes over 2.4G take a moment.** Each change takes about half a second over the radio.
 
-**The keyboard restarted while I changed a setting.** Don't run two lighting apps at the same
-time. This app locks the other tabs during music sync for this reason.
+**"Another program is using the keyboard right now."** Only one program talks to the keyboard
+at a time. This app, its music sync and the command line take turns. Stop music sync (or the
+other program) and try again. AULA's own software doesn't take part in this, so close it
+first.
+
+**The keyboard restarted while I changed a setting.** It can do this when it's hurried. The app
+spaces its writes out and checks the settings afterwards. Don't run AULA's software at the same
+time.
 
 **I want AULA's factory settings back.** Hold **Fn + Esc** for 3 seconds, as described in AULA's manual.
 
@@ -334,6 +358,16 @@ called `hid` is installed. Run `pip uninstall hid`, then `pip install --force-re
   the projects listed in [Credits](#credits) and checked on a real F87 Pro.
 - Saving a setting writes it once to the keyboard's memory. Music sync and previews use
   temporary frames that are never stored, so they don't wear that memory.
+- Damaged settings in the keyboard's memory can stop it from typing. The app guards against
+  this:
+  - It checks every settings block it reads. Blocks that don't look like real settings are
+    read again, and never written back.
+  - It writes only what changed, spaces out the writes, and checks the result.
+  - If a write left damaged settings behind, it puts the previous ones back right away.
+  - Only one program talks to the keyboard at a time, so music sync and setting changes never
+    overlap.
+  - When the keyboard's settings are damaged anyway, the app offers **Repair**.
+
 - The app never touches the keyboard's firmware.
 - This project isn't affiliated with AULA. Use it at your own risk.
 

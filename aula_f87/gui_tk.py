@@ -218,6 +218,8 @@ class App(tk.Tk):
         self._loading = False
         self._connecting = False
         self._apply_after = None
+        self._apply_queued = False
+        self._damaged = False   # the keyboard's stored settings need Repair
         self.music = None
         self._music_starting = False
         self._music_colors = [(0, 0, 0)] * device.PLANE
@@ -231,8 +233,11 @@ class App(tk.Tk):
         self.reconnect_button = ttk.Button(top, text="Reconnect",
                                            command=lambda: self.connect_keyboard())
         self.reconnect_button.pack(side="right")
-        self.banner = tk.Label(self, bg="#7a4f00", fg="white", anchor="w", padx=12, pady=6,
-                               wraplength=980, justify="left")
+        self.banner = tk.Frame(self, bg="#7a4f00")
+        self.banner_text = tk.Label(self.banner, bg="#7a4f00", fg="white", anchor="w", padx=12,
+                                    pady=6, wraplength=820, justify="left")
+        self.banner_text.pack(side="left", fill="x", expand=True)
+        self.repair_button = ttk.Button(self.banner, text="Repair", command=self._repair)
 
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -441,19 +446,51 @@ class App(tk.Tk):
 
         def failed(exc):
             self._connecting = False
-            self._disconnected(str(exc))
+            self._disconnected(str(exc), isinstance(exc, device.DamagedSettings))
 
         self.worker.submit(job, done, failed)
 
-    def _disconnected(self, message):
+    def _disconnected(self, message, damaged=False):
         if self.kb:
             self.worker.submit(self.kb.close)  # after jobs already queued for it
             self.kb = None
-        self.status.configure(text="Not connected")
+        self._damaged = damaged
+        self.status.configure(text="Settings damaged" if damaged else "Not connected")
         self.battery_label.configure(text="—")
-        self.banner.configure(text=message)
+        self.banner_text.configure(text=message)
+        if damaged:
+            self.repair_button.pack(side="right", padx=8, pady=4)
+        else:
+            self.repair_button.pack_forget()
         self.banner.pack(fill="x", before=self.tabs)
         self._sync_widgets()
+
+    def _repair(self):
+        """Write the keyboard's last good settings back (see Keyboard.repair)."""
+        if self._connecting:
+            return
+        self._connecting = True  # no reconnect attempts meanwhile
+        self.banner.pack_forget()
+        self.status.configure(text="Repairing…")
+
+        def job():
+            kb = device.connect()
+            try:
+                return kb.repair()
+            finally:
+                kb.close()
+
+        def done(used):
+            self._connecting = False
+            self._damaged = False
+            self.connect_keyboard()
+            self._toast(f"Repaired: put back the keyboard's {used}")
+
+        def failed(exc):
+            self._connecting = False
+            self._disconnected(f"Repair failed: {exc}", damaged=True)
+
+        self.worker.submit(job, done, failed)
 
     def _poll(self):
         self._polls += 1
@@ -496,6 +533,7 @@ class App(tk.Tk):
                            self._io_failed)
 
     def _on_close(self):
+        # Music sync stops with the window; the keyboard goes back to its own lighting.
         if self.wm_state() == "normal":  # (self.state is the lighting state here)
             self.settings["window"] = [self.winfo_width(), self.winfo_height()]
         if self.music:
@@ -612,12 +650,21 @@ class App(tk.Tk):
 
     def _apply_lighting(self):
         self._apply_after = None
-        if not self.kb:
-            return
-        kb, state = self.kb, self.state
-        self.worker.submit(lambda: kb.apply_lighting(state), None, self._io_failed)
+        if not self.kb or self._apply_queued:
+            return  # a queued job will send the newest state
+        self._apply_queued = True
+        kb = self.kb
+
+        def job():  # worker thread
+            self._apply_queued = False
+            kb.apply_lighting(self.state)
+
+        self.worker.submit(job, None, self._io_failed)
 
     def _io_failed(self, exc):
+        if isinstance(exc, device.DamagedSettings):
+            self._disconnected(str(exc), damaged=True)
+            return
         if isinstance(exc, OSError) or (self.kb and not self.kb.alive):
             self._disconnected("Lost connection to the keyboard.")
         self._toast(f"Couldn't update the keyboard: {exc}")

@@ -62,8 +62,14 @@ is the same "direct mode" that OpenRGB uses.
 
 - Right after a write, the keyboard briefly refuses the next transfers while it stores the data.
   Linux reports this as `EPROTO` or `EPIPE`. Retrying after 50–300 ms works.
-- One keyboard reset (a USB disconnect and reconnect) happened during a config write while live
-  frames were also being sent. Don't mix the two.
+- The keyboard has reset (a USB disconnect and reconnect) in the middle of a write twice. The
+  first time, live frames were being sent at the same time. The second time, the palette was
+  written right after it was read. Never mix writes with live frames, and leave about 200 ms
+  before and 350 ms after each write.
+- After such a reset, the stored settings were damaged once. The config held palette bytes,
+  and the palette was shifted by 21 bytes. The keyboard then stopped sending key presses, and
+  its side lights flashed. Writing back a valid config and palette fixed it. See
+  [Valid blocks](#valid-blocks).
 
 ## 2.4G receiver: output reports
 
@@ -130,6 +136,24 @@ Over 2.4G, the chunk is `seq = offset // 14` and the frame byte is `5 + offset %
 took effect once and were ignored in later tries, while Fn + Left Shift always works. The bar
 also ignores live frames: every LED position from 0 to 255 was tested, over both the cable and
 2.4G. So it can't follow music.
+
+## Valid blocks
+
+Every healthy config seen so far has these bytes. They come from the F87 Pro on the cable, and
+from the factory template of the newer F87 over 2.4G. The app treats a config without them as
+damaged. It reads it again, never writes it back, and offers Repair.
+
+| Offset | Value |
+|---|---|
+| 1, 2 | `03 03` |
+| 6, 7, 8 | `04 04 07` |
+| 11 | `20` |
+| 56, 57 | `FF FF` |
+| 126, 127 | `5A A5` |
+| 58–93 (effects 1–18) | Brightness 0–4, speed 0–4, color slot 0–7 |
+
+A healthy palette has 21 zero bytes at the start (effect 0 has no colors) and `5A A5` at bytes
+506–507.
 
 ## Effect numbers
 

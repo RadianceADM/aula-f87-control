@@ -24,6 +24,8 @@ jobs:
       - run: aula-f87-control --help
       - name: Import the core modules
         run: python -c "import aula_f87.device, aula_f87.hidio, aula_f87.music, aula_f87.layout, aula_f87.effects"
+      - name: Settings-safety tests (fake keyboard)
+        run: python -m unittest discover -s tests -v
       - name: Fails cleanly without a keyboard
         shell: bash
         run: |

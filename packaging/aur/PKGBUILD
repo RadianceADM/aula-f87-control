@@ -11,7 +11,7 @@ makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel
 optdepends=('gnome-shell-extension-appindicator: top-bar icon on GNOME'
             'tk: the simpler Tkinter window (aula-f87-control gui --tk)')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # set with updpkgsums after tagging
+sha256sums=('8f9ae452424283d59cc5a9401f5534755a61d3879f0f39c6c6538b8176f376a8')
 
 build() {
   cd "$pkgname-$pkgver"

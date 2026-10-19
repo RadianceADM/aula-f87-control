@@ -252,7 +252,7 @@ games, and so on.
 | Style | Looks like |
 |---|---|
 | EQ bars | One column per frequency band. Bass on the left is red, mids are yellow, treble on the right is green. |
-| EQ bars (meter colors) | The same bars, colored green, then yellow, then red from bottom to top. |
+| EQ bars (meter colors) | The same bars, colored by height: the two bottom rows green, the middle two yellow, the top two red. |
 | EQ bars (rainbow) | Each column has its own color. |
 | Beat pulse | The whole keyboard flashes on the bass, with the color slowly changing. |
 

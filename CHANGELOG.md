@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.5 — 2026-10-20
+
+- **More red in "EQ bars (meter colors)".** The rows are now two green, two yellow and two
+  red, from the bottom up. Before, only the top row (F1–F12) was red: on a hip-hop recording,
+  7 % of the lit keys were red, and now 23 % are.
+
 ## v0.4.4 — 2026-10-20
 
 - **Two lower music-sync sensitivity steps,** 0.35 and 0.2, for loud, dense music that lit the

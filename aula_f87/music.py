@@ -459,7 +459,7 @@ def _key_bands():
 
 KEY_BANDS = _key_bands()
 RED, YELLOW, GREEN = (255, 0, 0), (255, 170, 0), (0, 255, 0)
-METER_COLORS = (GREEN, GREEN, GREEN, YELLOW, YELLOW, RED)  # by height, bottom first
+METER_COLORS = (GREEN, GREEN, YELLOW, YELLOW, RED, RED)  # by height, bottom first
 
 
 def _band_color(band):

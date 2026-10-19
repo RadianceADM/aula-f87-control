@@ -1,6 +1,6 @@
 # Maintainer: RadianceADM <178825654+RadianceADM@users.noreply.github.com>
 pkgname=aula-f87-control
-pkgver=0.4.0
+pkgver=0.4.1
 pkgrel=1
 pkgdesc="Lighting, per-key colors, music sync, battery and sleep control for AULA F87 / F87 Pro keyboards"
 arch=('any')
@@ -11,7 +11,7 @@ makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel
 optdepends=('gnome-shell-extension-appindicator: top-bar icon on GNOME'
             'tk: the simpler Tkinter window (aula-f87-control gui --tk)')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('8f9ae452424283d59cc5a9401f5534755a61d3879f0f39c6c6538b8176f376a8')
+sha256sums=('f4b2688f0f6c34c7f743ede1effd4785c31265032ec5afa066928a0cfe9d51b4')
 
 build() {
   cd "$pkgname-$pkgver"

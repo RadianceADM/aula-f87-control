@@ -1,0 +1,36 @@
+# Maintainer: RadianceADM <178825654+RadianceADM@users.noreply.github.com>
+pkgname=aula-f87-control
+pkgver=0.3.2
+pkgrel=1
+pkgdesc="Lighting, per-key colors, music sync, battery and sleep control for AULA F87 / F87 Pro keyboards"
+arch=('any')
+url="https://github.com/RadianceADM/aula-f87-control"
+license=('GPL-3.0-or-later')
+depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'python-numpy' 'pipewire')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+optdepends=('gnome-shell-extension-appindicator: top-bar icon on GNOME'
+            'tk: the simpler Tkinter window (aula-f87-control gui --tk)')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # Lets the logged-in user reach the keyboard (Arch has no plugdev group; uaccess is enough).
+  sed 's/, GROUP="plugdev"//' udev/70-aula-f87.rules \
+    | install -Dm644 /dev/stdin "$pkgdir/usr/lib/udev/rules.d/70-aula-f87.rules"
+
+  install -Dm644 packaging/io.github.aula_f87.Control.desktop \
+    "$pkgdir/usr/share/applications/io.github.aula_f87.Control.desktop"
+  install -Dm644 aula_f87/data/io.github.aula_f87.Control.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.aula_f87.Control.svg"
+  install -Dm644 aula_f87/data/io.github.aula_f87.Control-symbolic.svg \
+    "$pkgdir/usr/share/icons/hicolor/symbolic/apps/io.github.aula_f87.Control-symbolic.svg"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

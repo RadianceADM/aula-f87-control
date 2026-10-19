@@ -93,8 +93,8 @@ def _hidraw_candidates(usb_id, report_marker):
             _bus, vid, pid = (int(part, 16) for part in fields.get("HID_ID", "").split(":"))
         except ValueError:
             continue
-        if (vid, pid) == usb_id and bytes([0x85, report_marker]) in descriptor:
-            path = f"/dev/{node.name}"
+        path = f"/dev/{node.name}"
+        if (vid, pid) == usb_id and bytes([0x85, report_marker]) in descriptor and os.path.exists(path):
             found.append((path, lambda p=path: HidrawDevice(p)))
     return found
 

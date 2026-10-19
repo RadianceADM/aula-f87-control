@@ -18,13 +18,14 @@ autostart="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/$app_id.desktop"
 icons="$HOME/.local/share/icons/hicolor"
 
 # Ask a running copy to quit (it answers on D-Bus), e.g. before an update.
+# Succeeds only if a copy was running.
 quit_running() {
     gdbus call --session --dest "$app_id" --object-path /io/github/aula_f87/Control \
-        --method org.gtk.Actions.Activate quit '[]' '{}' >/dev/null 2>&1 && sleep 1 || true
+        --method org.gtk.Actions.Activate quit '[]' '{}' >/dev/null 2>&1 && sleep 1
 }
 
 if [ "$1" = "--remove" ]; then
-    quit_running
+    quit_running || true
     rm -f "$bin" "$desktop" "$autostart" \
           "$icons/scalable/apps/$app_id.svg" "$icons/symbolic/apps/$app_id-symbolic.svg"
     echo "Removed the command, the app-menu entry, the icon and start at login."
@@ -64,9 +65,15 @@ Keywords=keyboard;rgb;backlight;aula;music;battery;
 StartupWMClass=$app_id
 EOF
 
-if [ "$1" != "--no-autostart" ]; then
-    mkdir -p "$(dirname "$autostart")"
-    cat > "$autostart" <<EOF
+# Start at login. With --no-autostart the entry is written with Hidden=true, the
+# standard "don't start this" marker, which the app also respects. An update keeps
+# the choice made earlier (e.g. with "Start at login" in the top-bar menu).
+hidden=""
+if [ "$1" = "--no-autostart" ] || { [ -f "$autostart" ] && grep -q '^Hidden=true' "$autostart"; }; then
+    hidden="Hidden=true"
+fi
+mkdir -p "$(dirname "$autostart")"
+cat > "$autostart" <<EOF
 [Desktop Entry]
 Type=Application
 Name=AULA F87 Control
@@ -76,8 +83,8 @@ Icon=$app_id
 Terminal=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
+$hidden
 EOF
-fi
 
 if [ ! -e /etc/udev/rules.d/70-aula-f87.rules ]; then
     echo "One more step: allow your user to talk to the keyboard (needs your password):"
@@ -86,13 +93,17 @@ if [ ! -e /etc/udev/rules.d/70-aula-f87.rules ]; then
     echo
 fi
 
-# Start it now (top-bar icon only) when installing from a desktop session.
-if [ "$1" != "--no-autostart" ] && [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
-    quit_running  # restart an older copy so the update takes effect
-    (setsid "$bin" --background >/dev/null 2>&1 &) || true
+# Restart a running (older) copy so an update takes effect, and start it now
+# (top-bar icon only) when start at login is on.
+if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+    was_running=0
+    quit_running && was_running=1
+    if [ -z "$hidden" ] || [ "$was_running" = 1 ]; then
+        (setsid "$bin" --background >/dev/null 2>&1 &) || true
+    fi
 fi
 
 echo "Installed. Open \"AULA F87 Control\" from the app menu, or run: aula-f87-control"
-if [ "$1" != "--no-autostart" ]; then
+if [ -z "$hidden" ]; then
     echo "It also starts at login with an icon in the top bar (turn off in the icon's menu)."
 fi

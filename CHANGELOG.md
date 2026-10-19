@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.2 — 2026-10-19
+
+- **Packages.** The release workflow can publish to PyPI through trusted publishing, and
+  there's an Arch Linux package (`packaging/aur/PKGBUILD`) with the udev rule, menu entry and
+  icons.
+- **Start at login is on by default for every install method,** including packages: the app
+  turns it on the first time it runs. Turning it off is remembered, and updates keep that
+  choice.
+- **New banner** for link previews and the README.
+- Fixed a confusing error when a keyboard was half-connected (hidraw device without a `/dev`
+  node).
+
 ## v0.3.1 — 2026-10-19
 
 - **App settings are saved now.** The app remembers whether music sync is on, its style,

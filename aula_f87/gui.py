@@ -888,6 +888,7 @@ class App(Adw.Application):
 
 
 def main(background=False):
+    autostart.enable_on_first_run()
     app = App(background)
     if background:
         app.register(None)

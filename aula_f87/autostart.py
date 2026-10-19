@@ -1,6 +1,10 @@
 """Start the app at login (Linux): it runs in the background with its top-bar icon.
 
 Uses the freedesktop autostart folder, which GNOME, KDE and most desktops read.
+Turning it off writes the entry with ``Hidden=true`` (the standard way to say
+"don't start this"), so the choice is remembered and also overrides a
+system-wide entry. On its first run the app turns start-at-login on, unless
+an entry already exists, so every install method behaves the same.
 """
 
 import os
@@ -24,15 +28,7 @@ def _command():
     return f'"{found}"' if " " in found and not found.endswith("-m aula_f87") else found
 
 
-def is_enabled():
-    path = _path()
-    try:
-        return "Hidden=true" not in path.read_text()
-    except OSError:
-        return False
-
-
-def enable():
+def _write(hidden):
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -44,11 +40,33 @@ def enable():
         f"Icon={DESKTOP_ID}\n"
         "Terminal=false\n"
         "NoDisplay=true\n"
-        "X-GNOME-Autostart-enabled=true\n")
+        "X-GNOME-Autostart-enabled=true\n"
+        + ("Hidden=true\n" if hidden else ""))
+
+
+def is_configured():
+    return _path().exists()
+
+
+def is_enabled():
+    try:
+        return "Hidden=true" not in _path().read_text()
+    except OSError:
+        return False
+
+
+def enable():
+    _write(hidden=False)
 
 
 def disable():
-    try:
-        _path().unlink()
-    except FileNotFoundError:
-        pass
+    _write(hidden=True)
+
+
+def enable_on_first_run():
+    """Turn start-at-login on the first time the app runs (never after the user chose)."""
+    if not is_configured():
+        try:
+            enable()
+        except OSError:
+            pass

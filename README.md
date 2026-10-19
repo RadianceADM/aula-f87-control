@@ -7,7 +7,7 @@
 Control the lighting of the **AULA F87 / F87 Pro** mechanical keyboard on **Linux and Windows**,
 without AULA's own software.
 
-![Lighting tab](docs/screenshots/lighting.png)
+![AULA F87 Control: music sync lighting the keyboard as EQ bars](docs/social-preview.png)
 
 ## Features
 
@@ -156,6 +156,8 @@ the same tabs and features, but without the top-bar icon and without starting at
   keep it off.
 
 ### Lighting
+
+![Lighting tab](docs/screenshots/lighting.png)
 
 - **Lighting effect.** Pick one of the built-in effects. *Custom per-key* shows your painted keys.
 - **Color.** Pick any color, or click a quick color. Picking a color turns Rainbow off. If the
@@ -347,6 +349,8 @@ AULA_F87_AUDIO=soundcard python3 -m aula_f87 music  # use the Windows/macOS audi
 | `aula_f87/autostart.py` | Start at login (freedesktop autostart) |
 | `aula_f87/settings.py` | App preferences kept on the computer |
 | `aula_f87/data/` | App icon and top-bar icon |
+| `packaging/` | Desktop entry and the Arch Linux (AUR) package |
+| `docs/social-preview.png` | Banner for link previews (Settings → Social preview) |
 | `aula_f87/effects.py`, `layout.py` | Effect list, presets, key positions and LED numbers |
 | `aula_f87/__main__.py` | Command line and window selection |
 | `scripts/` | Quick install scripts for Linux and Windows |

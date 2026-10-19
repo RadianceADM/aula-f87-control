@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AULA F87 Control
+Comment=Backlight, per-key colors, music sync and battery for the AULA F87 keyboard
+Exec=aula-f87-control
+Icon=io.github.aula_f87.Control
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=keyboard;rgb;backlight;aula;music;battery;
+StartupWMClass=io.github.aula_f87.Control

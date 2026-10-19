@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aula-f87-control"
-version = "0.3.1"
+version = "0.3.2"
 description = "Backlight effects, per-key colors, music sync, sleep timer and battery level for AULA F87 / F87 Pro keyboards, on Linux and Windows"
 readme = "README.md"
 license = "GPL-3.0-or-later"

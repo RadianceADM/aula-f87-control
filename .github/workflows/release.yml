@@ -1,17 +1,16 @@
 name: Release
 
-# Push a tag such as v0.2.0 (matching the version in pyproject.toml) to publish
-# a GitHub release with the wheel and source archive, using the matching
-# section of CHANGELOG.md as the release notes.
+# Push a tag such as v0.3.2 (matching the version in pyproject.toml) to publish:
+#   - a GitHub release with the wheel and the source archive, with the matching
+#     section of CHANGELOG.md as release notes
+#   - the same files on PyPI, once this workflow is registered as a "trusted
+#     publisher" on pypi.org and the repository variable PYPI_PUBLISH is "true"
 on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -38,7 +37,43 @@ jobs:
           ' CHANGELOG.md > notes.md
           test -s notes.md || { echo "No CHANGELOG.md section for $GITHUB_REF_NAME"; exit 1; }
           cat notes.md
-      - name: Publish the release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notes
+          path: notes.md
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "AULA F87 Control $GITHUB_REF_NAME" --notes-file notes.md
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "AULA F87 Control $GITHUB_REF_NAME" --notes-file artifacts/notes/notes.md
+
+  pypi:
+    needs: build
+    if: vars.PYPI_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/aula-f87-control/
+    permissions:
+      id-token: write   # trusted publishing: no PyPI password or token is stored
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

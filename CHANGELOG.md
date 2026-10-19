@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.2 — 2026-10-19
+
+- **About window** with the version, links, and this changelog.
+  - Linux: the main menu (☰) in the window, or **About** in the top-bar menu. The changelog is
+    under *What's New*, and *Troubleshooting → Debugging Information* has details to paste
+    into a bug report.
+  - Windows / macOS: the **About** button at the top of the window.
+- `aula-f87-control --version` prints the version.
+
 ## v0.4.1 — 2026-10-19
 
 - **The keyboard's stored settings are protected.** On an F87 Pro, they once got damaged after

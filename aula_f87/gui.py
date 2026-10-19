@@ -4,6 +4,7 @@ import colorsys
 import queue
 import sys
 import threading
+from pathlib import Path
 
 import gi
 
@@ -13,7 +14,7 @@ gi.require_version("Gsk", "4.0")
 gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
-from . import autostart, device  # noqa: E402
+from . import about, autostart, device  # noqa: E402
 from .settings import Settings  # noqa: E402
 from .tray import SEPARATOR, Item  # noqa: E402
 from .effects import (EFFECTS, FOLLOW_KEYS, MUSIC_FOLLOW, MUSIC_STYLES,  # noqa: E402
@@ -23,6 +24,7 @@ from .effects import (EFFECTS, FOLLOW_KEYS, MUSIC_FOLLOW, MUSIC_STYLES,  # noqa:
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U  # noqa: E402
 
 APP_ID = "io.github.aula_f87.Control"
+ICON = "io.github.aula_f87.Control"
 APPLY_DELAY_MS = 350
 POLL_SECONDS = 3
 BATTERY_EVERY_POLLS = 20  # about once a minute
@@ -228,6 +230,10 @@ class Window(Adw.ApplicationWindow):
         self.status_label.add_css_class("dim-label")
         status.append(self.status_label)
         header.pack_start(status)
+        menu = Gio.Menu()
+        menu.append(f"About {about.NAME}", "app.about")
+        header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu,
+                                       tooltip_text="Main menu", primary=True))
         self.refresh_button = Gtk.Button(icon_name="view-refresh-symbolic",
                                          tooltip_text="Reconnect and reload from keyboard")
         self.refresh_button.connect("clicked", lambda *_: self.connect_keyboard())
@@ -607,6 +613,40 @@ class Window(Adw.ApplicationWindow):
         self._shutdown()
         self.get_application().quit()
 
+    def show_about(self):
+        """Version, links, and the changelog under "What's New"."""
+        self.show_window()
+        # The icon ships with the package too, for installs that didn't add it to the icon theme.
+        Gtk.IconTheme.get_for_display(self.get_display()).add_search_path(
+            str(Path(__file__).resolve().parent / "data"))
+        info = dict(application_name=about.NAME, application_icon=ICON, version=about.__version__,
+                    developer_name=about.DEVELOPER, website=about.WEBSITE, issue_url=about.ISSUES,
+                    license_type=Gtk.License.GPL_3_0, copyright=about.COPYRIGHT,
+                    comments=about.SUMMARY, debug_info=self._debug_info())
+        notes = about.release_notes_markup()
+        if notes:
+            info.update(release_notes=notes, release_notes_version=about.__version__)
+        if hasattr(Adw, "AboutDialog"):        # libadwaita 1.5+
+            dialog = Adw.AboutDialog(**info)
+            dialog.add_link("Full changelog", about.CHANGELOG_URL)
+            dialog.present(self)
+        else:                                   # libadwaita 1.2-1.4
+            window = Adw.AboutWindow(transient_for=self, modal=True, **info)
+            window.add_link("Full changelog", about.CHANGELOG_URL)
+            window.present()
+
+    def _debug_info(self):
+        import platform
+        keyboard = self.kb.description if self.kb else "not connected"
+        return "\n".join([
+            f"{about.NAME} {about.__version__}",
+            f"Keyboard: {keyboard}",
+            f"Python {platform.python_version()}, GTK {Gtk.get_major_version()}."
+            f"{Gtk.get_minor_version()}.{Gtk.get_micro_version()}, libadwaita "
+            f"{Adw.get_major_version()}.{Adw.get_minor_version()}.{Adw.get_micro_version()}",
+            f"System: {platform.platform()}",
+        ])
+
     # ------------------------------------------------------------------ top-bar icon
 
     def _tray_menu(self):
@@ -651,6 +691,7 @@ class Window(Adw.ApplicationWindow):
                 for n in range(5)]),
             SEPARATOR,
             Item("Open AULA F87 Control", self.show_window),
+            Item("About", self.show_about),
             Item("Start at login", self._toggle_autostart, toggle="checkmark",
                  checked=autostart.is_enabled()),
             Item("Quit", self.quit_app),
@@ -985,6 +1026,9 @@ class App(Adw.Application):
         #   --object-path /io/github/aula_f87/Control --method org.gtk.Actions.Activate quit [] {}
         action = Gio.SimpleAction.new("quit", None)
         action.connect("activate", lambda *_: self._quit())
+        self.add_action(action)
+        action = Gio.SimpleAction.new("about", None)
+        action.connect("activate", lambda *_: self.get_windows() and self.get_windows()[0].show_about())
         self.add_action(action)
 
     def _quit(self):

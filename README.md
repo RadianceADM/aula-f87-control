@@ -162,7 +162,9 @@ such as BlackHole, set as the default input.
 ## Using the app
 
 The Ubuntu app uses GTK and looks native on GNOME. Windows and macOS get a simpler window with
-the same tabs and features, but without the top-bar icon and without starting at login. On Linux you can open that one too, with `aula-f87-control gui --tk`
+the same tabs and features, but without the top-bar icon and without starting at login.
+To see the version and what changed, open **About**. On Linux it's in the main menu (☰) and
+the top-bar menu. On Windows and macOS it's a button at the top of the window. On Linux you can open that one too, with `aula-f87-control gui --tk`
 (needs `python3-tk`).
 
 ### What is saved where
@@ -207,6 +209,7 @@ The keyboard icon in the top bar gives you quick access without opening the wind
 | **Keep backlight on** | Turns the sleep timer on or off |
 | **Color**, **Effect**, **Brightness** | Quick lighting changes, the same as in the window |
 | **Open AULA F87 Control** | Shows the window. Launching the app from the app menu does the same. |
+| **About** | Version, links and the changelog |
 | **Start at login** | Turns starting at login on or off |
 | **Repair keyboard settings** | Only shown when the keyboard's saved settings look damaged |
 | **Quit** | Stops the app, including music sync |
@@ -288,6 +291,7 @@ times per second, because the radio can't take frames any faster.
 | `aula-f87-control repair` | Put back the keyboard's last good settings (see [Troubleshooting](#troubleshooting)) |
 | `aula-f87-control gui --tk` | Open the simpler Tkinter window, even on Linux |
 | `aula-f87-control --background` | Start with only the top-bar icon. This is what runs at login. |
+| `aula-f87-control --version` | Print the version |
 
 You can give `--effect` as a number or as the start of a name: `off`, `static`, `breathing`,
 `rainbow`, `flash`, `raindrops`, `ripples`, `twinkling`, `retro`, `neon`, `reactive`, `sine`,

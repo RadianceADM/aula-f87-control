@@ -13,7 +13,7 @@ import tkinter as tk
 import traceback
 from tkinter import colorchooser, font as tkfont, ttk
 
-from . import device
+from . import about, device
 from .settings import Settings
 from .effects import (EFFECTS, FOLLOW_KEYS, MUSIC_FOLLOW, MUSIC_STYLES, PER_KEY, PRESETS,
                       SIDE_MODES, SLEEP_MINUTES,
@@ -233,6 +233,8 @@ class App(tk.Tk):
         self.reconnect_button = ttk.Button(top, text="Reconnect",
                                            command=lambda: self.connect_keyboard())
         self.reconnect_button.pack(side="right")
+        ttk.Button(top, text="About", command=self._show_about).pack(side="right", padx=(0, 6))
+        self._about = None
         self.banner = tk.Frame(self, bg="#7a4f00")
         self.banner_text = tk.Label(self.banner, bg="#7a4f00", fg="white", anchor="w", padx=12,
                                     pady=6, wraplength=820, justify="left")
@@ -531,6 +533,57 @@ class App(tk.Tk):
                    else f"Backlight turns off after {sleep_label(minutes)} idle")
         self.worker.submit(lambda: kb.set_sleep(minutes), lambda _r: self._toast(message),
                            self._io_failed)
+
+    def _show_about(self):
+        """Version, links and the changelog."""
+        if self._about is not None and self._about.winfo_exists():
+            self._about.lift()
+            return
+        import webbrowser
+        win = self._about = tk.Toplevel(self)
+        win.title(f"About {about.NAME}")
+        win.geometry("620x640")
+        win.transient(self)
+        body = ttk.Frame(win, padding=16)
+        body.pack(fill="both", expand=True)
+        base = tkfont.nametofont("TkDefaultFont")
+        title_font = base.copy()
+        title_font.configure(size=base.cget("size") + 6, weight="bold")
+        bold = base.copy()
+        bold.configure(weight="bold")
+        ttk.Label(body, text=about.NAME, font=title_font).pack(anchor="w")
+        ttk.Label(body, text=f"Version {about.__version__}").pack(anchor="w", pady=(2, 8))
+        ttk.Label(body, text=about.SUMMARY, wraplength=580, justify="left").pack(anchor="w")
+        links = ttk.Frame(body)
+        links.pack(anchor="w", pady=8)
+        for text, url in (("Website", about.WEBSITE), ("Report an issue", about.ISSUES),
+                          ("Full changelog", about.CHANGELOG_URL)):
+            link = tk.Label(links, text=text, fg="#3b82f6", cursor="hand2", font=base)
+            link.pack(side="left", padx=(0, 16))
+            link.bind("<Button-1>", lambda _e, u=url: webbrowser.open(u))
+        ttk.Label(body, text=f"{about.LICENSE} · {about.COPYRIGHT}").pack(anchor="w")
+        ttk.Label(body, text="Changelog", font=bold).pack(anchor="w", pady=(14, 4))
+        frame = ttk.Frame(body)
+        frame.pack(fill="both", expand=True)
+        text = tk.Text(frame, wrap="word", relief="flat", padx=10, pady=8, font=base,
+                       height=10, highlightthickness=0)
+        bar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        text.pack(side="left", fill="both", expand=True)
+        text.tag_configure("version", font=bold, spacing1=10, spacing3=4)
+        text.tag_configure("item", lmargin1=8, lmargin2=24, spacing3=3)
+        text.tag_configure("sub", lmargin1=28, lmargin2=44, spacing3=3)
+        entries = about.releases()
+        for version, date, items in entries:
+            text.insert("end", f"Version {version}" + (f" · {date}" if date else "") + "\n", "version")
+            for depth, item in items:
+                text.insert("end", ("– " if depth else "• ") + about.plain(item) + "\n",
+                            "sub" if depth else "item")
+        if not entries:
+            text.insert("end", f"See {about.CHANGELOG_URL}")
+        text.configure(state="disabled")
+        ttk.Button(body, text="Close", command=win.destroy).pack(anchor="e", pady=(10, 0))
 
     def _on_close(self):
         # Music sync stops with the window; the keyboard goes back to its own lighting.

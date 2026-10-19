@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from . import device
+from . import __version__, device
 from .effects import EFFECTS, SIDE_MODES, battery_text, effect_info
 
 STYLE_NAMES = ("bars", "meter", "rainbow", "pulse")  # same order as music.STYLES
@@ -66,6 +66,7 @@ def _print_state(kb, state):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="aula-f87-control")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--background", action="store_true",
                         help="start hidden with only the top-bar icon (used at login)")
     sub = parser.add_subparsers(dest="cmd")

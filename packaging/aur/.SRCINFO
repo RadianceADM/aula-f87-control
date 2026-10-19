@@ -1,6 +1,6 @@
 pkgbase = aula-f87-control
 	pkgdesc = Lighting, per-key colors, music sync, battery and sleep control for AULA F87 / F87 Pro keyboards
-	pkgver = 0.4.3
+	pkgver = 0.4.5
 	pkgrel = 1
 	url = https://github.com/RadianceADM/aula-f87-control
 	arch = any
@@ -17,7 +17,7 @@ pkgbase = aula-f87-control
 	depends = pipewire
 	optdepends = gnome-shell-extension-appindicator: top-bar icon on GNOME
 	optdepends = tk: the simpler Tkinter window (aula-f87-control gui --tk)
-	source = aula-f87-control-0.4.3.tar.gz::https://github.com/RadianceADM/aula-f87-control/archive/refs/tags/v0.4.3.tar.gz
-	sha256sums = 9ab3e466418d84cab3dbcd73ba49195a67a9112db565d10930437abf2e224802
+	source = aula-f87-control-0.4.5.tar.gz::https://github.com/RadianceADM/aula-f87-control/archive/refs/tags/v0.4.5.tar.gz
+	sha256sums = f1846313368b6ca1dee0a715f00c4f57e85e6ea36a5f2d2b9742e0fe0c5ef3e2
 
 pkgname = aula-f87-control

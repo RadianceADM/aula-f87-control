@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml/badge.svg)](https://github.com/RadianceADM/aula-f87-control/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/RadianceADM/aula-f87-control)](https://github.com/RadianceADM/aula-f87-control/releases/latest)
+[![PyPI](https://img.shields.io/pypi/v/aula-f87-control)](https://pypi.org/project/aula-f87-control/)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 Control the lighting of the **AULA F87 / F87 Pro** mechanical keyboard on **Linux and Windows**,
@@ -63,8 +64,9 @@ Both scripts install the [latest release](https://github.com/RadianceADM/aula-f8
 - **Linux:** the script asks for your password to install the required packages and the udev
   rule. It then adds **AULA F87 Control** to the app menu and the `aula-f87-control` command,
   and starts the app at login with its [top-bar icon](#top-bar-icon-linux).
-- **Windows:** the script installs Python with winget if it's missing, installs the app with
-  pip, and adds **AULA F87 Control** to the Start menu.
+- **Windows:** the script installs Python with winget if it's missing, installs the app from
+  [PyPI](https://pypi.org/project/aula-f87-control/) with pip, and adds **AULA F87 Control** to
+  the Start menu.
 
 Run the same command again to update. To uninstall:
 
@@ -133,7 +135,7 @@ itself on the first time you open the app. On GNOME, install
 2. Open **Command Prompt** or **PowerShell** and run:
 
    ```
-   pip install https://github.com/RadianceADM/aula-f87-control/archive/refs/heads/main.zip
+   pip install aula-f87-control
    ```
 
 3. To start the app, press **Win + R**, type `aula-f87-control-gui` and press Enter. You can also
@@ -142,12 +144,14 @@ itself on the first time you open the app. On GNOME, install
    To pin the app to Start or the taskbar, find the program with `where aula-f87-control-gui`,
    then right-click it and choose **Pin to Start**.
 
-No driver is needed. Close AULA's own software first if it is running. To update, run the
-same `pip install` command with `--upgrade`. To uninstall, run `pip uninstall aula-f87-control`.
+No driver is needed. Close AULA's own software first if it is running.
+
+- **Update:** `pip install --upgrade aula-f87-control`
+- **Uninstall:** `pip uninstall aula-f87-control`
 
 ### macOS (untested)
 
-Install it the same way as on Windows (`pip3 install …`), then run `aula-f87-control-gui`.
+Install it with `pip3 install aula-f87-control`, then run `aula-f87-control-gui`.
 macOS may ask you to allow **Input Monitoring**. Music sync needs a loopback audio device,
 such as BlackHole, set as the default input.
 
@@ -371,9 +375,11 @@ AULA_F87_AUDIO=soundcard python3 -m aula_f87 music  # use the Windows/macOS audi
 | `scripts/` | Quick install scripts for Linux and Windows |
 
 **Releases.** Bump `version` in `pyproject.toml`, add a section to `CHANGELOG.md`, then push a
-tag that matches the version, such as `git tag v0.2.1 && git push origin v0.2.1`. GitHub
-Actions builds the wheel and the source archive and publishes the release. CI tests installing
-with pip on Linux and Windows, and runs both quick installers, on every push.
+tag that matches the version, such as `git tag v0.3.3 && git push origin v0.3.3`. The
+`release.yaml` workflow then builds the wheel and the source archive, publishes the GitHub
+release, and uploads to [PyPI](https://pypi.org/project/aula-f87-control/) through trusted
+publishing, so no PyPI token is stored anywhere. CI tests installing with pip on Linux and
+Windows, and runs both quick installers, on every push.
 
 ## Credits
 

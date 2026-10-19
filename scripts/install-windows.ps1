@@ -9,11 +9,11 @@
 #
 # What it does:
 #   1. finds Python 3.10+ (installs Python 3.12 with winget if there is none)
-#   2. installs the latest release of the app with pip
+#   2. installs the latest release of the app from PyPI with pip
 #   3. adds "AULA F87 Control" to the Start menu
 #
 # Options (environment variables):
-#   AULA_VERSION = v0.2.0   install a specific release ("main" = latest code)
+#   AULA_VERSION = v0.3.2   install a specific release ("main" = latest code from GitHub)
 #   AULA_PACKAGE = <path>   install from a local folder or any pip-installable URL
 
 $ErrorActionPreference = 'Stop'
@@ -75,13 +75,11 @@ $package = $env:AULA_PACKAGE
 if (-not $package) {
     $version = $env:AULA_VERSION
     if (-not $version) {
-        try { $version = (Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest").tag_name } catch { $version = $null }
-        if (-not $version) { $version = 'main' }
-    }
-    if ($version -eq 'main') {
+        $package = 'aula-f87-control'   # latest release, from PyPI
+    } elseif ($version -eq 'main') {
         $package = "https://github.com/$Repo/archive/refs/heads/main.zip"
     } else {
-        $package = "https://github.com/$Repo/archive/refs/tags/$version.zip"
+        $package = 'aula-f87-control==' + $version.TrimStart('v')
     }
 }
 Write-Step "Installing AULA F87 Control from $package"

@@ -91,3 +91,23 @@ jobs:
           Get-Content scripts/install-windows.ps1 -Raw | Invoke-Expression
           $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'AULA F87 Control.lnk'
           if (Test-Path $link) { throw 'Shortcut was not removed' }
+
+  windows-quick-install-pypi:
+    name: Windows quick installer (latest release from PyPI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Run scripts/install-windows.ps1 as users do
+        shell: powershell
+        run: Get-Content scripts/install-windows.ps1 -Raw | Invoke-Expression
+      - name: The installed command works
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'AULA F87 Control.lnk'
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          & (Join-Path (Split-Path $target) 'aula-f87-control.exe') --help
+          if ($LASTEXITCODE -ne 0) { throw 'aula-f87-control --help failed' }

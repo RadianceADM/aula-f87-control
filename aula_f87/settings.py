@@ -57,7 +57,7 @@ class Settings:
         d = self._data
         d["music_on"] = bool(d["music_on"])
         d["music_style"] = _clamp(d["music_style"], 0, 3, 0)
-        d["music_sensitivity"] = _clamp(d["music_sensitivity"], 0.5, 2.0, 1.0)
+        d["music_sensitivity"] = _clamp(d["music_sensitivity"], 0.2, 2.0, 1.0)
         d["music_brightness"] = _clamp(d["music_brightness"], 0.1, 1.0, 1.0)
         follow = d["music_follow"] if isinstance(d["music_follow"], list) else []
         d["music_follow"] = [k for k in ("bass", "vocals", "beat") if k in follow]

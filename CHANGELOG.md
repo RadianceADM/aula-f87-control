@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.4 — 2026-10-20
+
+- **Two lower music-sync sensitivity steps,** 0.35 and 0.2, for loud, dense music that lit the
+  whole board even at the lowest setting. Below 0.5 the bars are cut shorter. On a hip-hop
+  recording, 0.5 lit 49 of the 87 keys on average, 0.35 lights 33, and 0.2 lights 19. Settings
+  from 0.5 up behave as before.
+
 ## v0.4.3 — 2026-10-20
 
 - **Music sync: Vocals follows the singing voice.** It keeps what sits in the centre of the

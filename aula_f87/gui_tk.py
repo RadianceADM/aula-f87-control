@@ -403,7 +403,7 @@ class App(tk.Tk):
             row=5, column=1, sticky="w", padx=12)
 
         ttk.Label(form, text="Sensitivity").grid(row=2, column=0, sticky="w", pady=6)
-        self.sensitivity = LevelScale(form, 0.5, 2.0, 0.1, self._music_settings, fmt="{:.1f}")
+        self.sensitivity = LevelScale(form, 0.2, 2.0, 0.05, self._music_settings, fmt="{:.2f}")
         self.sensitivity.set(self.settings["music_sensitivity"])
         self.sensitivity.grid(row=2, column=1, sticky="w", padx=12)
 

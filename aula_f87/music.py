@@ -369,9 +369,14 @@ class Analyzer:
             return samples, samples
         return samples[:, 0], samples[:, 1]
 
+    MIN_SPAN_SENSITIVITY = 0.5  # below this, lower sensitivity makes bars shorter
+
     def update(self, samples, dt, sensitivity=1.0, follow=()):
         """samples: stereo (N x 2) or mono; uses the last BASS_FFT_SIZE / FFT_SIZE of them.
-        sensitivity > 1 widens the dB window, so bars sit higher."""
+        sensitivity 0.2-2: from 0.5 up, a wider dB window makes bars sit higher;
+        below 0.5 the window stays and the bars are cut shorter (0.2 = 40 % height)."""
+        height = min(1.0, sensitivity / self.MIN_SPAN_SENSITIVITY)
+        sensitivity = max(sensitivity, self.MIN_SPAN_SENSITIVITY)
         left, right = self._stereo(samples)
         mid_all = (left + right) * 0.5
         mid = mid_all[-FFT_SIZE:]
@@ -402,7 +407,7 @@ class Analyzer:
         self.beat = max(hit, self.beat - self.PULSE_FALL_PER_S * dt)
 
         if not follow:
-            self.levels, self.pulse = full, self.beat
+            self.levels, self.pulse = full * height, self.beat * height
             return self.levels
 
         parts, drives = [], []
@@ -438,8 +443,8 @@ class Analyzer:
         if "beat" in follow:
             parts.append(self.beat * _BURST)
             drives.append(self.beat)
-        self.levels = np.max(parts, axis=0)
-        self.pulse = max(drives)
+        self.levels = np.max(parts, axis=0) * height
+        self.pulse = max(drives) * height
         return self.levels
 
 

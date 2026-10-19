@@ -85,7 +85,7 @@ def main(argv=None):
     m = sub.add_parser("music", help="make the backlight follow what's playing (Ctrl+C stops)")
     m.add_argument("--style", choices=STYLE_NAMES, default="bars",
                    help="bars: bass red / mids yellow / treble green; meter: green-yellow-red by height")
-    m.add_argument("--sensitivity", type=float, default=1.0, help="0.5-2, higher = taller bars")
+    m.add_argument("--sensitivity", type=float, default=1.0, help="0.2-2, higher = taller bars")
     m.add_argument("--brightness", type=float, default=1.0, help="0.1-1")
     m.add_argument("--follow", default="all",
                    help="what to react to: all, or a comma list of bass, vocals, beat")
@@ -172,7 +172,7 @@ def _music(kb, args):
         kb.close()
         return 1
     sync.style = STYLE_NAMES.index(args.style)
-    sync.sensitivity = min(2.0, max(0.5, args.sensitivity))
+    sync.sensitivity = min(2.0, max(0.2, args.sensitivity))
     sync.brightness = min(1.0, max(0.1, args.brightness))
     sync.follow = args.follow
     print(f"Music sync on {kb.description}. Press Ctrl+C to stop.")

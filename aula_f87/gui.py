@@ -421,10 +421,10 @@ class Window(Adw.ApplicationWindow):
         follow_row.add_suffix(follow_box)
         group.add(follow_row)
 
-        self.sensitivity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
+        self.sensitivity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.2, 2.0, 0.05)
         self.brightness_music = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.1, 1.0, 0.05)
         for scale, value, marks in ((self.sensitivity, self.settings["music_sensitivity"],
-                                     (0.5, 1.0, 1.5, 2.0)),
+                                     (0.2, 0.35, 0.5, 1.0, 1.5, 2.0)),
                                     (self.brightness_music, self.settings["music_brightness"],
                                      (0.25, 0.5, 0.75, 1.0))):
             scale.set_value(value)

@@ -268,6 +268,8 @@ games, and so on.
   Ticked choices are combined. For example, **Bass + Beat** shows the bass line and flashes on
   every kick. With mono audio, *Vocals* can't separate the voice and acts as a mid-range filter.
 - **Sensitivity.** Higher makes the bars taller. The app also adjusts to the volume on its own.
+  The two lowest steps (0.35 and 0.2) cut the bars shorter, for loud, dense music that lights
+  the whole board even at 0.5.
   With **All**, the bars rise at once and fall smoothly, without flicker.
 - **Brightness.** How bright the music lights are.
 
@@ -288,7 +290,7 @@ times per second, because the radio can't take frames any faster.
 | `aula-f87-control set --side 1` | Side lights effect: 0 off, 1 rainbow wave, 2 rainbow together, 3 solid, 4 breathing |
 | `aula-f87-control sleep never` | Keep the backlight always on |
 | `aula-f87-control sleep 10` | Backlight turns off after 10 idle minutes |
-| `aula-f87-control music --style bars --follow bass,beat` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. `--follow`: `all` (default) or any of `bass`, `vocals`, `beat`. Other options: `--sensitivity 0.5–2`, `--brightness 0.1–1`, `--seconds N` |
+| `aula-f87-control music --style bars --follow bass,beat` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. `--follow`: `all` (default) or any of `bass`, `vocals`, `beat`. Other options: `--sensitivity 0.2–2`, `--brightness 0.1–1`, `--seconds N` |
 | `aula-f87-control repair` | Put back the keyboard's last good settings (see [Troubleshooting](#troubleshooting)) |
 | `aula-f87-control gui --tk` | Open the simpler Tkinter window, even on Linux |
 | `aula-f87-control --background` | Start with only the top-bar icon. This is what runs at login. |

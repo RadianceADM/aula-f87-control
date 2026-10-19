@@ -1,5 +1,8 @@
 # Arch Linux package (AUR)
 
+> **Status:** not published yet. AUR account registration was paused when this was written
+> (October 2026). Until then, build it locally with `makepkg -si` (see below).
+
 `PKGBUILD` builds the latest release from its GitHub tag and installs:
 
 - the app (`aula-f87-control`, `aula-f87-control-gui`),

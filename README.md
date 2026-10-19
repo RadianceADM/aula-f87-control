@@ -111,6 +111,21 @@ steps above:
 - **Fedora:** `python3-gobject gtk4 libadwaita python3-numpy pipewire-utils`
 - **Arch:** `python-gobject gtk4 libadwaita python-numpy pipewire`
 
+### Arch Linux
+
+The package isn't on the AUR yet, because AUR sign-ups are paused for now. You can build the
+same package straight from this repository:
+
+```sh
+git clone https://github.com/RadianceADM/aula-f87-control.git
+cd aula-f87-control/packaging/aur
+makepkg -si
+```
+
+The package installs the udev rule, the menu entry and the icons. Start at login turns
+itself on the first time you open the app. On GNOME, install
+`gnome-shell-extension-appindicator` to get the top-bar icon.
+
 ### Windows 10 / 11 (manual)
 
 1. Install **Python 3.10 or newer** from [python.org](https://www.python.org/downloads/).

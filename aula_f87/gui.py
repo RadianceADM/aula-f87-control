@@ -653,11 +653,12 @@ class Window(Adw.ApplicationWindow):
         connected = self.kb is not None
         editable = connected and self.music is None and not self._music_starting
         header = self.kb.description if connected else "Keyboard not connected"
-        items = [Item(header, enabled=False)]
+        items = [Item(header, enabled=False, key="keyboard")]
         if self._damaged:
             items.append(Item("Repair keyboard settings", self._repair))
         if connected and self.battery is not None:
-            items.append(Item(f"Battery: {battery_text(self.battery, False)}", enabled=False))
+            items.append(Item(f"Battery: {battery_text(self.battery, False)}", enabled=False,
+                              key="battery"))
         items += [
             SEPARATOR,
             Item("Music sync", self._toggle_music, toggle="checkmark",

@@ -76,7 +76,9 @@ _MENU_XML = """<node><interface name="com.canonical.dbusmenu">
 
 @dataclass
 class Item:
-    """One menu entry. ``toggle`` is None, "checkmark" or "radio"."""
+    """One menu entry. ``toggle`` is None, "checkmark" or "radio".
+
+    ``key`` identifies the entry across rebuilds when its label changes."""
     label: str = ""
     action: object = None
     toggle: str = None
@@ -84,6 +86,7 @@ class Item:
     enabled: bool = True
     children: list = None
     separator: bool = False
+    key: str = None
 
 
 SEPARATOR = Item(separator=True)
@@ -111,6 +114,11 @@ class Tray:
         self._tooltip = title
         self._revision = 1
         self._nodes = {}
+        # Ids stay the same for the same entry and are never reused: the top-bar
+        # host updates entries by id and doesn't expect one to change type
+        # (e.g. separator -> entry) when entries come and go.
+        self._menu_ids = {}
+        self._next_id = 0
         self.available = False
         self._rebuild()
 
@@ -195,20 +203,29 @@ class Tray:
     # ------------------------------------------------------------------ dbusmenu
 
     def _rebuild(self):
-        """Number the items depth-first; ids stay stable while the shape is the same."""
+        """Give every entry its id (see ``_menu_ids``) and remember the tree."""
         self._nodes = {0: _Node(Item(), [])}
-        counter = [0]
 
-        def add(parent_id, items):
+        def add(parent_id, parent_key, items):
+            separators, seen = 0, {}
             for item in items:
-                counter[0] += 1
-                node_id = counter[0]
+                if item.separator:
+                    separators += 1
+                    own = f"separator {separators}"
+                else:
+                    own = item.key or item.label
+                seen[own] = seen.get(own, 0) + 1
+                key = f"{parent_key}/{own}" + (f"#{seen[own]}" if seen[own] > 1 else "")
+                if key not in self._menu_ids:
+                    self._next_id += 1
+                    self._menu_ids[key] = self._next_id
+                node_id = self._menu_ids[key]
                 self._nodes[node_id] = _Node(item, [])
                 self._nodes[parent_id].children.append(node_id)
                 if item.children:
-                    add(node_id, item.children)
+                    add(node_id, key, item.children)
 
-        add(0, self._build_menu())
+        add(0, "", self._build_menu())
 
     def _props(self, node_id):
         item = self._nodes[node_id].item

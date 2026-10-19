@@ -18,6 +18,7 @@ DEFAULTS = {
     "music_style": 0,
     "music_sensitivity": 1.0,
     "music_brightness": 1.0,
+    "music_follow": [],          # any of "bass", "vocals", "beat"; empty = everything
     "tab": "lighting",
     "brush": [255, 0, 0],
     "window": [1060, 820],
@@ -58,6 +59,8 @@ class Settings:
         d["music_style"] = _clamp(d["music_style"], 0, 3, 0)
         d["music_sensitivity"] = _clamp(d["music_sensitivity"], 0.5, 2.0, 1.0)
         d["music_brightness"] = _clamp(d["music_brightness"], 0.1, 1.0, 1.0)
+        follow = d["music_follow"] if isinstance(d["music_follow"], list) else []
+        d["music_follow"] = [k for k in ("bass", "vocals", "beat") if k in follow]
         if d["tab"] not in ("lighting", "per-key", "music"):
             d["tab"] = "lighting"
         try:

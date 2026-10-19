@@ -16,7 +16,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gsk, Gtk, Pango  # noqa
 from . import autostart, device  # noqa: E402
 from .settings import Settings  # noqa: E402
 from .tray import SEPARATOR, Item  # noqa: E402
-from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES,  # noqa: E402
+from .effects import (EFFECTS, FOLLOW_KEYS, MUSIC_FOLLOW, MUSIC_STYLES,  # noqa: E402
+                      PER_KEY, PRESETS, SIDE_MODES,
                       SLEEP_MINUTES, Effect, battery_text, effect_info, nearest_sleep_index,
                       sleep_label)
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U  # noqa: E402
@@ -397,6 +398,19 @@ class Window(Adw.ApplicationWindow):
         self.music_style_row.connect("notify::selected", lambda *_: self._music_settings())
         group.add(self.music_style_row)
 
+        self._follow_updating = False
+        self.follow_checks = {}
+        follow_box = Gtk.Box(spacing=14, valign=Gtk.Align.CENTER)
+        for key, label in (("all", "All"),) + MUSIC_FOLLOW:
+            check = Gtk.CheckButton(label=label)
+            check.connect("toggled", lambda _b, k=key: self._follow_toggled(k))
+            follow_box.append(check)
+            self.follow_checks[key] = check
+        self._show_follow(self.settings["music_follow"])
+        follow_row = Adw.ActionRow(title="Follow", subtitle="What the lights react to")
+        follow_row.add_suffix(follow_box)
+        group.add(follow_row)
+
         self.sensitivity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
         self.brightness_music = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.1, 1.0, 0.05)
         for scale, value, marks in ((self.sensitivity, self.settings["music_sensitivity"],
@@ -434,7 +448,41 @@ class Window(Adw.ApplicationWindow):
             self.settings["music_on"] = True
             self._start_music()
 
+    def _show_follow(self, selected):
+        self._follow_updating = True
+        try:
+            self.follow_checks["all"].set_active(not selected)
+            for key in FOLLOW_KEYS:
+                self.follow_checks[key].set_active(key in selected)
+        finally:
+            self._follow_updating = False
+
+    def _follow(self):
+        return [key for key in FOLLOW_KEYS if self.follow_checks[key].get_active()]
+
+    def _follow_toggled(self, key):
+        """"All" and the specific choices exclude each other; with nothing
+        picked, "All" ticks itself again."""
+        if self._follow_updating:
+            return
+        checks = self.follow_checks
+        if key == "all" and checks["all"].get_active():
+            self._show_follow([])
+        elif key != "all" and checks[key].get_active():
+            self._show_follow(self._follow())
+        elif not self._follow():
+            self._show_follow([])
+        self._music_settings()
+
+    def _tray_follow(self, key):
+        if key == "all":
+            self._show_follow([])
+            self._music_settings()
+        else:
+            self.follow_checks[key].set_active(not self.follow_checks[key].get_active())
+
     def _music_settings(self):
+        self.settings["music_follow"] = self._follow()
         self.settings["music_style"] = self.music_style_row.get_selected()
         self.settings["music_sensitivity"] = round(self.sensitivity.get_value(), 2)
         self.settings["music_brightness"] = round(self.brightness_music.get_value(), 2)
@@ -443,6 +491,7 @@ class Window(Adw.ApplicationWindow):
             self.music.style = self.music_style_row.get_selected()
             self.music.sensitivity = self.sensitivity.get_value()
             self.music.brightness = self.brightness_music.get_value()
+            self.music.follow = tuple(self._follow())
 
     def _start_music(self):
         if not self.kb or self._music_starting:
@@ -558,6 +607,13 @@ class Window(Adw.ApplicationWindow):
                 Item(name, lambda i=i: self.music_style_row.set_selected(i), toggle="radio",
                      checked=self.music_style_row.get_selected() == i)
                 for i, name in enumerate(MUSIC_STYLES)]),
+            Item("Follow", children=[
+                Item("All", lambda: self._tray_follow("all"), toggle="checkmark",
+                     checked=not self._follow())
+            ] + [
+                Item(label, lambda k=key: self._tray_follow(k), toggle="checkmark",
+                     checked=key in self._follow())
+                for key, label in MUSIC_FOLLOW]),
             Item("Keep backlight on",
                  lambda: self.keep_on_row.set_active(not self.keep_on_row.get_active()),
                  toggle="checkmark", checked=self.keep_on_row.get_active(), enabled=editable),

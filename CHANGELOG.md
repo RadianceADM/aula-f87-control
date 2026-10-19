@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.0 — 2026-10-19
+
+- **Music sync: choose what to follow.** Tick **All**, or any of **Bass**, **Vocals** and
+  **Beat**, in the window, the top-bar menu (*Follow*) or the command line
+  (`--follow bass,beat`). The choice is saved.
+  - **Bass** looks only at 30–300 Hz, measured with a longer window for finer steps.
+  - **Vocals** keeps 150 Hz–5 kHz from the centre of the stereo mix. It uses how alike the two
+    channels are over time, so instruments spread to the sides drop out.
+  - **Beat** finds kick drums from sudden rises in the low end, so a steady bass line no
+    longer counts as a beat.
+- Better beat detection for *Beat pulse* and the new *Beat* follow mode.
+- The command line rejects an invalid `--follow` value before connecting to the keyboard.
+
 ## v0.3.2 — 2026-10-19
 
 - **Packages.** The release workflow can publish to PyPI through trusted publishing, and

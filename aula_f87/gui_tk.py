@@ -15,7 +15,8 @@ from tkinter import colorchooser, font as tkfont, ttk
 
 from . import device
 from .settings import Settings
-from .effects import (EFFECTS, MUSIC_STYLES, PER_KEY, PRESETS, SIDE_MODES, SLEEP_MINUTES,
+from .effects import (EFFECTS, FOLLOW_KEYS, MUSIC_FOLLOW, MUSIC_STYLES, PER_KEY, PRESETS,
+                      SIDE_MODES, SLEEP_MINUTES,
                       Effect, battery_text, effect_info, nearest_sleep_index, sleep_label)
 from .layout import HEIGHT_U, KEY_X, KEYS, WIDTH_U
 
@@ -380,6 +381,20 @@ class App(tk.Tk):
         self.music_style_box.bind("<<ComboboxSelected>>", lambda _e: self._music_settings())
         self.music_style_box.grid(row=1, column=1, sticky="w", padx=12)
 
+        ttk.Label(form, text="Follow").grid(row=4, column=0, sticky="w", pady=6)
+        follow_row = ttk.Frame(form)
+        follow_row.grid(row=4, column=1, sticky="w", padx=12)
+        self._follow_updating = False
+        self.follow_vars = {}
+        for key, label in (("all", "All"),) + MUSIC_FOLLOW:
+            var = tk.BooleanVar()
+            ttk.Checkbutton(follow_row, text=label, variable=var,
+                            command=lambda k=key: self._follow_toggled(k)).pack(side="left", padx=(0, 12))
+            self.follow_vars[key] = var
+        self._show_follow(self.settings["music_follow"])
+        ttk.Label(form, text="What the lights react to", foreground="#777777").grid(
+            row=5, column=1, sticky="w", padx=12)
+
         ttk.Label(form, text="Sensitivity").grid(row=2, column=0, sticky="w", pady=6)
         self.sensitivity = LevelScale(form, 0.5, 2.0, 0.1, self._music_settings, fmt="{:.1f}")
         self.sensitivity.set(self.settings["music_sensitivity"])
@@ -684,7 +699,25 @@ class App(tk.Tk):
             self.settings["music_on"] = True
             self._start_music()
 
+    def _show_follow(self, selected):
+        self.follow_vars["all"].set(not selected)
+        for key in FOLLOW_KEYS:
+            self.follow_vars[key].set(key in selected)
+
+    def _follow(self):
+        return [key for key in FOLLOW_KEYS if self.follow_vars[key].get()]
+
+    def _follow_toggled(self, key):
+        """"All" and the specific choices exclude each other; with nothing
+        picked, "All" ticks itself again."""
+        if key == "all" and self.follow_vars["all"].get():
+            self._show_follow([])
+        else:
+            self._show_follow(self._follow())
+        self._music_settings()
+
     def _music_settings(self):
+        self.settings["music_follow"] = self._follow()
         self.settings["music_style"] = max(0, self.music_style_box.current())
         self.settings["music_sensitivity"] = self.sensitivity.get()
         self.settings["music_brightness"] = self.music_brightness.get()
@@ -692,6 +725,7 @@ class App(tk.Tk):
             self.music.style = max(0, self.music_style_box.current())
             self.music.sensitivity = self.sensitivity.get()
             self.music.brightness = self.music_brightness.get()
+            self.music.follow = tuple(self._follow())
 
     def _start_music(self):
         if not self.kb or self._music_starting:

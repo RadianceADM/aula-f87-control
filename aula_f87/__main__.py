@@ -86,11 +86,21 @@ def main(argv=None):
                    help="bars: bass red / mids yellow / treble green; meter: green-yellow-red by height")
     m.add_argument("--sensitivity", type=float, default=1.0, help="0.5-2, higher = taller bars")
     m.add_argument("--brightness", type=float, default=1.0, help="0.1-1")
+    m.add_argument("--follow", default="all",
+                   help="what to react to: all, or a comma list of bass, vocals, beat")
     m.add_argument("--seconds", type=float, help="stop automatically after this long")
     args = parser.parse_args(argv)
 
     if args.cmd in (None, "gui"):
         return gui_main(force_tk=getattr(args, "tk", False), background=args.background)
+    if args.cmd == "music":
+        follow = [part.strip().lower() for part in args.follow.split(",") if part.strip()]
+        unknown = [part for part in follow if part not in ("all", "bass", "vocals", "beat")]
+        if unknown:
+            print(f"Unknown --follow value: {', '.join(unknown)} (use all, bass, vocals, beat)",
+                  file=sys.stderr)
+            return 2
+        args.follow = tuple(part for part in follow if part != "all")
 
     try:
         kb = device.connect()
@@ -147,6 +157,7 @@ def _music(kb, args):
     sync.style = STYLE_NAMES.index(args.style)
     sync.sensitivity = min(2.0, max(0.5, args.sensitivity))
     sync.brightness = min(1.0, max(0.1, args.brightness))
+    sync.follow = args.follow
     print(f"Music sync on {kb.description}. Press Ctrl+C to stop.")
     start = time.monotonic()
     try:

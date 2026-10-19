@@ -195,7 +195,7 @@ The keyboard icon in the top bar gives you quick access without opening the wind
 | Menu item | What it does |
 |---|---|
 | Keyboard name and battery | Shows the current connection |
-| **Music sync** | Starts or stops music sync. *Music style* picks the look. |
+| **Music sync** | Starts or stops music sync. *Music style* picks the look and *Follow* what it reacts to. |
 | **Keep backlight on** | Turns the sleep timer on or off |
 | **Color**, **Effect**, **Brightness** | Quick lighting changes, the same as in the window |
 | **Open AULA F87 Control** | Shows the window. Launching the app from the app menu does the same. |
@@ -243,6 +243,17 @@ games, and so on.
 | EQ bars (rainbow) | Each column has its own color. |
 | Beat pulse | The whole keyboard flashes on the bass, with the color slowly changing. |
 
+- **Follow.** Picks what the lights react to. Tick one or more:
+
+  | Follow | What moves the lights |
+  |---|---|
+  | **All** (default) | The whole sound, from deep bass to cymbals |
+  | **Bass** | Only the low end (30–300 Hz): bass lines and kick drums, spread over the whole keyboard |
+  | **Vocals** | The voice range (150 Hz–5 kHz), keeping only what sits in the centre of the stereo mix, where singers usually are. Instruments panned to the sides mostly drop out. |
+  | **Beat** | The kick drum. The keyboard bursts from the middle on every hit. |
+
+  Ticked choices are combined. For example, **Bass + Beat** shows the bass line and flashes on
+  every kick. With mono audio, *Vocals* can't separate the voice and acts as a mid-range filter.
 - **Sensitivity.** Higher makes the bars taller. The app also adjusts to the volume on its own.
 - **Brightness.** How bright the music lights are.
 
@@ -263,7 +274,7 @@ times per second, because the radio can't take frames any faster.
 | `aula-f87-control set --side 1` | Side lights effect: 0 off, 1 rainbow wave, 2 rainbow together, 3 solid, 4 breathing |
 | `aula-f87-control sleep never` | Keep the backlight always on |
 | `aula-f87-control sleep 10` | Backlight turns off after 10 idle minutes |
-| `aula-f87-control music --style bars` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. Options: `--sensitivity 0.5–2`, `--brightness 0.1–1`, `--seconds N` |
+| `aula-f87-control music --style bars --follow bass,beat` | Music sync until Ctrl+C. Styles: `bars`, `meter`, `rainbow`, `pulse`. `--follow`: `all` (default) or any of `bass`, `vocals`, `beat`. Other options: `--sensitivity 0.5–2`, `--brightness 0.1–1`, `--seconds N` |
 | `aula-f87-control gui --tk` | Open the simpler Tkinter window, even on Linux |
 | `aula-f87-control --background` | Start with only the top-bar icon. This is what runs at login. |
 

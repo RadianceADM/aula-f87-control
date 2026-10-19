@@ -29,7 +29,8 @@ from .effects import MUSIC_STYLES as STYLES
 from .layout import KEYS, WIDTH_U
 
 RATE = 48000
-FFT_SIZE = 2048
+FFT_SIZE = 2048            # main analysis window (~43 ms)
+BASS_FFT_SIZE = 4096       # longer window: finer frequency steps for the bass range
 BLOCK = 1024               # frames per capture read
 BANDS = 18                 # roughly one band per key column
 ROWS = sorted({k.y for k in KEYS})
@@ -37,25 +38,29 @@ LOW_HZ, HIGH_HZ = 40, 16000
 
 BARS, METER, RAINBOW, PULSE = range(len(STYLES))
 
+# What music sync follows. An empty selection means everything (the whole spectrum).
+from .effects import FOLLOW_KEYS as FOLLOW_CHOICES  # noqa: E402
+
 
 class MusicError(Exception):
     pass
 
 
 class _Ring:
-    """Keeps the most recent FFT_SIZE mono samples."""
+    """Keeps the most recent BASS_FFT_SIZE stereo samples (shape N x 2)."""
 
     def __init__(self):
-        self._data = np.zeros(FFT_SIZE, dtype=np.float32)
+        self._data = np.zeros((BASS_FFT_SIZE, 2), dtype=np.float32)
         self._lock = threading.Lock()
 
-    def push(self, mono):
+    def push(self, stereo):
+        n = len(stereo)
         with self._lock:
-            if len(mono) >= FFT_SIZE:
-                self._data[:] = mono[-FFT_SIZE:]
+            if n >= BASS_FFT_SIZE:
+                self._data[:] = stereo[-BASS_FFT_SIZE:]
             else:
-                self._data = np.roll(self._data, -len(mono))
-                self._data[-len(mono):] = mono
+                self._data = np.roll(self._data, -n, axis=0)
+                self._data[-n:] = stereo
 
     def copy(self):
         with self._lock:
@@ -88,7 +93,7 @@ class PipeWireCapture:
                 continue
             stereo = np.frombuffer(pending[:usable], dtype="<i2").reshape(-1, 2)
             pending = pending[usable:]
-            self._ring.push(stereo.mean(axis=1, dtype=np.float32) / 32768.0)
+            self._ring.push(stereo.astype(np.float32) / 32768.0)
 
     @property
     def alive(self):
@@ -143,7 +148,10 @@ class SoundcardCapture:
                     self._ready.set()
                     while not self._stop.is_set():
                         data = recorder.record(numframes=BLOCK)
-                        self._ring.push(np.asarray(data, dtype=np.float32).mean(axis=1))
+                        data = np.asarray(data, dtype=np.float32)
+                        if data.ndim == 1 or data.shape[1] == 1:
+                            data = np.repeat(data.reshape(-1, 1), 2, axis=1)
+                        self._ring.push(data[:, :2])
         except Exception as exc:  # reported through `alive` / the constructor
             self._error = exc
         finally:
@@ -177,63 +185,163 @@ def open_capture():
     return SoundcardCapture()
 
 
-class Analyzer:
-    """FFT -> per-band levels 0..1. Each band has its own automatic gain, so
-    every column dances to its part of the music; levels rise instantly and
-    fall smoothly."""
+class _BandMeter:
+    """Spectrum -> BANDS levels 0..1 for one frequency range.
+
+    Each band has its own automatic gain, so every column moves with its part
+    of the sound; levels rise instantly and fall smoothly."""
 
     SPAN_DB = 24.0          # dB window shown per band at sensitivity 1
     RANGE_DB = 40.0         # bands this far below the loudest are not boosted
     REF_FALL_DB_PER_S = 6.0
     FALL_PER_S = 2.2        # bars drop from full to empty in ~0.45 s
-    PULSE_FALL_PER_S = 3.0
     FLOOR_DB = -100.0
-    SILENCE_RMS = 10 ** (-70 / 20)  # quieter than -70 dBFS counts as silence
 
-    def __init__(self):
-        self.window = np.hanning(FFT_SIZE).astype(np.float32)
-        freqs = np.fft.rfftfreq(FFT_SIZE, 1.0 / RATE)
-        edges = np.geomspace(LOW_HZ, HIGH_HZ, BANDS + 1)
+    def __init__(self, fft_size, low_hz, high_hz, tilt=True):
+        freqs = np.fft.rfftfreq(fft_size, 1.0 / RATE)
+        edges = np.geomspace(low_hz, high_hz, BANDS + 1)
         self.slices = []
         for lo, hi in zip(edges[:-1], edges[1:]):
-            a = int(np.searchsorted(freqs, lo))
+            a = min(int(np.searchsorted(freqs, lo)), len(freqs) - 1)
             b = max(a + 1, int(np.searchsorted(freqs, hi)))
             self.slices.append((a, b))
         centers = np.sqrt(edges[:-1] * edges[1:])
-        self.tilt_db = 3.0 * np.log2(centers / 1000.0)  # per-bin density -> band power
+        # per-bin density -> band power (music is roughly pink)
+        self.tilt_db = 3.0 * np.log2(centers / 1000.0) if tilt else np.zeros(BANDS)
         self.band_ref = np.full(BANDS, self.FLOOR_DB + self.SPAN_DB)
-        self.bass_avg_db = None
         self.levels = np.zeros(BANDS)
-        self.pulse = 0.0
 
-    def update(self, samples, dt, sensitivity=1.0):
-        """sensitivity > 1 widens the dB window, so bars sit higher."""
-        if float(np.sqrt(np.mean(samples ** 2))) < self.SILENCE_RMS:
+    def band_db(self, spectrum):
+        energy = np.array([np.sqrt(np.mean(spectrum[a:b] ** 2)) for a, b in self.slices])
+        return 20 * np.log10(energy + 1e-12) + self.tilt_db
+
+    def update(self, spectrum, dt, sensitivity):
+        """spectrum: magnitudes, or None for silence."""
+        if spectrum is None:
             target = np.zeros(BANDS)
-            hit = 0.0
         else:
-            spectrum = np.abs(np.fft.rfft(samples * self.window)) / (FFT_SIZE / 4)
-            energy = np.array([np.sqrt(np.mean(spectrum[a:b] ** 2)) for a, b in self.slices])
-            db = 20 * np.log10(energy + 1e-12) + self.tilt_db
-
+            db = self.band_db(spectrum)
+            span = self.SPAN_DB * sensitivity
             # Per-band reference: follows peaks up at once, sinks slowly, and is
             # held within RANGE_DB of the loudest band so near-silent bands
             # don't get amplified into noise.
-            span = self.SPAN_DB * sensitivity
             self.band_ref = np.maximum(db, self.band_ref - self.REF_FALL_DB_PER_S * dt)
             self.band_ref = np.maximum(
                 self.band_ref, max(float(self.band_ref.max()) - self.RANGE_DB, self.FLOOR_DB + span))
             target = np.clip((db - (self.band_ref - span)) / span, 0.0, 1.0)
-
-            # Beat: bass jumping above its own recent (~1 s) average.
-            bass_db = float(db[:3].max())
-            if self.bass_avg_db is None:
-                self.bass_avg_db = bass_db
-            hit = float(np.clip((bass_db - self.bass_avg_db - 1.5) / 6.0, 0.0, 1.0))
-            self.bass_avg_db += (bass_db - self.bass_avg_db) * min(1.0, dt)
-
         self.levels = np.maximum(target, self.levels - self.FALL_PER_S * dt)
-        self.pulse = max(hit, self.pulse - self.PULSE_FALL_PER_S * dt)
+        return self.levels
+
+
+# The beat lights the board from the middle outwards.
+_BURST = 1.0 - 0.45 * np.abs(np.arange(BANDS) - (BANDS - 1) / 2) / ((BANDS - 1) / 2)
+
+
+class Analyzer:
+    """Audio -> ``levels`` (one 0..1 value per key column) and ``pulse`` (0..1).
+
+    ``follow`` picks what drives them; the selected parts are combined:
+
+    * empty (all): the whole spectrum, 40 Hz-16 kHz
+    * "bass":   only 30-300 Hz, spread over all columns
+    * "vocals": 150 Hz-5 kHz of what's in the centre of the stereo image,
+      where singers are usually mixed; instruments spread to the sides drop out
+    * "beat":   kick-drum hits; the board bursts from the middle on each beat
+    """
+
+    PULSE_FALL_PER_S = 3.0
+    SILENCE_RMS = 10 ** (-70 / 20)  # quieter than -70 dBFS counts as silence
+    CENTRE_SMOOTH_S = 0.25          # time constant of the stereo-centre estimate
+    BEAT_BANDS = 4                  # lowest full-spectrum bands (40-150 Hz) used for the beat
+
+    def __init__(self):
+        self.window = np.hanning(FFT_SIZE).astype(np.float32)
+        self.bass_window = np.hanning(BASS_FFT_SIZE).astype(np.float32)
+        self.full = _BandMeter(FFT_SIZE, LOW_HZ, HIGH_HZ)
+        self.bass = _BandMeter(BASS_FFT_SIZE, 30, 300, tilt=False)
+        self.vocals = _BandMeter(FFT_SIZE, 150, 5000)
+        self.prev_low_db = None
+        self.flux_avg = 0.0
+        self.beat = 0.0
+        self.cross = None   # smoothed L*conj(R), |L|^2, |R|^2 per frequency bin
+        self.levels = np.zeros(BANDS)
+        self.pulse = 0.0
+
+    @staticmethod
+    def _stereo(samples):
+        samples = np.asarray(samples, dtype=np.float32)
+        if samples.ndim == 1:
+            return samples, samples
+        return samples[:, 0], samples[:, 1]
+
+    def update(self, samples, dt, sensitivity=1.0, follow=()):
+        """samples: stereo (N x 2) or mono; uses the last BASS_FFT_SIZE / FFT_SIZE of them.
+        sensitivity > 1 widens the dB window, so bars sit higher."""
+        left, right = self._stereo(samples)
+        mid_all = (left + right) * 0.5
+        mid = mid_all[-FFT_SIZE:]
+        silent = float(np.sqrt(np.mean(mid ** 2))) < self.SILENCE_RMS
+        follow = set(follow) & set(FOLLOW_CHOICES)
+        norm = FFT_SIZE / 4
+
+        # Whole spectrum: drives "all" and the beat detector.
+        spectrum = None if silent else np.abs(np.fft.rfft(mid * self.window)) / norm
+        full = self.full.update(spectrum, dt, sensitivity)
+
+        # Beat: sudden rises in the low bands (spectral flux), compared with
+        # their recent average. A steady bass line doesn't rise, a kick does.
+        hit = 0.0
+        if not silent:
+            low_db = self.full.band_db(spectrum)[:self.BEAT_BANDS]
+            if self.prev_low_db is not None:
+                flux = float(np.maximum(low_db - self.prev_low_db, 0.0).sum())
+                hit = float(np.clip((flux - 1.5 * self.flux_avg - 3.0) / 12.0, 0.0, 1.0))
+                self.flux_avg += (flux - self.flux_avg) * min(1.0, dt / 1.0)
+            self.prev_low_db = low_db
+        else:
+            self.prev_low_db = None
+        self.beat = max(hit, self.beat - self.PULSE_FALL_PER_S * dt)
+
+        if not follow:
+            self.levels, self.pulse = full, self.beat
+            return self.levels
+
+        parts, drives = [], []
+        if "bass" in follow:
+            bass_spec = None
+            if not silent:
+                frame = mid_all[-BASS_FFT_SIZE:] if len(mid_all) >= BASS_FFT_SIZE else mid
+                win = self.bass_window if len(frame) == BASS_FFT_SIZE else self.window
+                bass_spec = np.abs(np.fft.rfft(frame * win)) / (len(frame) / 4)
+            levels = self.bass.update(bass_spec, dt, sensitivity)
+            parts.append(levels)
+            drives.append(float(np.sort(levels)[-4:].mean()))
+        if "vocals" in follow:
+            vocal_spec = None
+            if not silent:
+                # Keep what sits in the centre: per frequency, L and R must be
+                # correlated over time (coherence) and about equally loud.
+                spec_l = np.fft.rfft(left[-FFT_SIZE:] * self.window)
+                spec_r = np.fft.rfft(right[-FFT_SIZE:] * self.window)
+                now = (spec_l * np.conj(spec_r), np.abs(spec_l) ** 2, np.abs(spec_r) ** 2)
+                if self.cross is None:
+                    self.cross = now
+                else:
+                    k = min(1.0, dt / self.CENTRE_SMOOTH_S)
+                    self.cross = tuple(old + (new - old) * k for old, new in zip(self.cross, now))
+                lr, ll, rr = self.cross
+                coherence = np.abs(lr) ** 2 / (ll * rr + 1e-20)
+                balance = 2 * np.sqrt(ll * rr) / (ll + rr + 1e-20)
+                mask = np.clip(coherence * balance, 0.0, 1.0) ** 2
+                vocal_spec = np.abs(np.fft.rfft(mid * self.window)) * mask / norm
+            levels = self.vocals.update(vocal_spec, dt, sensitivity)
+            parts.append(levels)
+            drives.append(float(levels.mean()))
+        if "beat" in follow:
+            parts.append(self.beat * _BURST)
+            drives.append(self.beat)
+        self.levels = np.max(parts, axis=0)
+        self.pulse = max(drives)
         return self.levels
 
 
@@ -309,6 +417,7 @@ class MusicSync:
         self.style = 0
         self.sensitivity = 1.0
         self.brightness = 1.0
+        self.follow = ()           # subset of FOLLOW_CHOICES; empty = everything
         self.frames = 0
         self._stop = threading.Event()
         self._capture = open_capture()
@@ -336,7 +445,7 @@ class MusicSync:
                     detail = getattr(self._capture, "error", None)
                     raise MusicError("Audio capture stopped" + (f": {detail}" if detail else "."))
                 now = time.monotonic()
-                analyzer.update(self._capture.samples(), now - last, self.sensitivity)
+                analyzer.update(self._capture.samples(), now - last, self.sensitivity, self.follow)
                 last = now
                 colors = render(analyzer, self.style, self.brightness, few_colors, now - start)
                 self.link.send_live(colors)

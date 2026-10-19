@@ -63,6 +63,10 @@ PRESETS = (
 # Music sync styles; the index is used by the GUIs and the CLI.
 MUSIC_STYLES = ("EQ bars", "EQ bars (meter colors)", "EQ bars (rainbow)", "Beat pulse")
 
+# What music sync can follow (key, label). Nothing selected = everything.
+MUSIC_FOLLOW = (("bass", "Bass"), ("vocals", "Vocals"), ("beat", "Beat"))
+FOLLOW_KEYS = tuple(key for key, _label in MUSIC_FOLLOW)
+
 # "Turn the backlight off after" choices, in minutes (the keyboard stores 30 s steps).
 SLEEP_MINUTES = (1, 2, 5, 10, 15, 30, 60)
 

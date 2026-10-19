@@ -262,12 +262,13 @@ games, and so on.
   |---|---|
   | **All** (default) | The whole sound, from deep bass to cymbals |
   | **Bass** | Only the low end (30–300 Hz): bass lines and kick drums, spread over the whole keyboard |
-  | **Vocals** | The voice range (150 Hz–5 kHz), keeping only what sits in the centre of the stereo mix, where singers usually are. Instruments panned to the sides mostly drop out. |
+  | **Vocals** | The singing voice. The keys glow while someone sings, centred on the column of the sung pitch: low notes on the left, high notes on the right. Drums, the bass and instruments spread wide in the stereo mix are filtered out, so the glow follows the vocal lines and goes dark between them. |
   | **Beat** | The kick drum. The keyboard bursts from the middle on every hit. |
 
   Ticked choices are combined. For example, **Bass + Beat** shows the bass line and flashes on
   every kick. With mono audio, *Vocals* can't separate the voice and acts as a mid-range filter.
 - **Sensitivity.** Higher makes the bars taller. The app also adjusts to the volume on its own.
+  With **All**, the bars rise at once and fall smoothly, without flicker.
 - **Brightness.** How bright the music lights are.
 
 Music sync sends temporary frames and saves nothing. Your normal lighting comes back about a

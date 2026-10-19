@@ -233,6 +233,99 @@ class _BandMeter:
         return self.levels
 
 
+def _ease(value, target, dt, tau):
+    """Exponential smoothing step towards target with time constant tau."""
+    return value + (target - value) * (1.0 - np.exp(-dt / tau))
+
+
+def _blur(levels):
+    """[0.2, 0.6, 0.2] blur across neighbouring columns."""
+    padded = np.concatenate(([levels[0]], levels, [levels[-1]]))
+    return 0.2 * padded[:-2] + 0.6 * padded[1:-1] + 0.2 * padded[2:]
+
+
+class _Voice:
+    """The singing voice: what sits in the centre of the stereo mix, is harmonic
+    (steady partials, unlike drum hits) and lies in the voice range. Gives a
+    loudness and the column the voice's pitch belongs to."""
+
+    LOW_HZ, HIGH_HZ = 300.0, 3500.0   # below: 808s and bass harmonics; above: cymbals, breath
+    HISTORY = 5                        # frames (~0.17 s at 30 fps) for "steady"
+    SPREAD = 8                         # bins either side for "broadband"
+    PITCH_LOW, PITCH_HIGH = 90.0, 700.0
+    RISE_S, FALL_S, GLIDE_S = 0.03, 0.15, 0.06
+    REF_FALL_DB_PER_S = 4.0
+    SPAN_DB = 20.0
+    WIDTH = 2.3                        # columns, of the light "hill" around the voice
+
+    def __init__(self):
+        self.lo = int(np.floor(self.LOW_HZ * FFT_SIZE / RATE + 0.5))
+        self.hi = int(np.floor(self.HIGH_HZ * FFT_SIZE / RATE + 0.5))
+        self.history = np.zeros((self.HISTORY, self.hi - self.lo), np.float32)
+        self.next = 0
+        self.reference = -100.0 + self.SPAN_DB
+        self.level = 0.0
+        self.column = BANDS / 2
+        # Pitch candidates and, for each, the bins of its harmonics (and of the
+        # points half-way between them), worked out once.
+        steps, n = 48, self.hi - self.lo
+        self.f0s = self.PITCH_LOW * (self.PITCH_HIGH / self.PITCH_LOW) ** (np.arange(steps) / (steps - 1))
+        hz_per_bin = RATE / FFT_SIZE
+        harmonics = self.f0s[:, None] * np.arange(1, 11)[None, :]
+        self.used = (harmonics >= self.LOW_HZ) & (harmonics + self.f0s[:, None] / 2 <= self.HIGH_HZ)
+
+        def neighbours(hz):  # bins b-1, b, b+1 inside the range; n (= a zero) otherwise
+            b = np.floor(hz / hz_per_bin + 0.5).astype(int) - self.lo
+            idx = b[..., None] + np.array([-1, 0, 1])
+            return np.where((idx >= 0) & (idx < n), idx, n)
+
+        self.on_bins = neighbours(harmonics)
+        self.between_bins = neighbours(harmonics + self.f0s[:, None] / 2)
+        self.count = self.used.sum(axis=1)
+
+    def update(self, centre, dt, sensitivity, norm):
+        """centre: magnitudes of the centred part of the mix (all bins), or None for silence."""
+        target = 0.0
+        if centre is not None:
+            now = np.asarray(centre[self.lo:self.hi], np.float32)
+            self.history[self.next] = now
+            self.next = (self.next + 1) % self.HISTORY
+            # Harmonic/percussive split: steady over time (median across frames)
+            # versus spread over frequency (median across neighbouring bins).
+            steady = np.sort(self.history, axis=0)[self.HISTORY // 2]
+            padded = np.pad(now, self.SPREAD, constant_values=np.nan)
+            windows = np.sort(np.lib.stride_tricks.sliding_window_view(padded, 2 * self.SPREAD + 1), axis=1)
+            counts = (~np.isnan(windows)).sum(axis=1)
+            broad = windows[np.arange(len(now)), counts // 2]
+            mask = steady * steady / (steady * steady + broad * broad + np.float32(1e-20))
+            voice = (now * mask).astype(np.float32)
+            energy = float(np.sqrt(np.sum(voice * voice) / np.float32(len(voice))) / np.float32(norm))
+            db = 20.0 * np.log10(energy + 1e-12)
+            span = self.SPAN_DB * sensitivity
+            self.reference = max(db, self.reference - self.REF_FALL_DB_PER_S * dt, -100.0 + span)
+            target = float(np.clip((db - (self.reference - span)) / span, 0.0, 1.0))
+            column = self._pitch_column(voice)
+            if column is not None and self.level > 0.05:
+                self.column = _ease(self.column, column, dt, self.GLIDE_S)
+        tau = self.RISE_S if target > self.level else self.FALL_S
+        self.level = _ease(self.level, target, dt, tau)
+        d = np.arange(BANDS) - self.column
+        return self.level * (0.15 + 0.85 * np.exp(-d * d / (2.0 * self.WIDTH * self.WIDTH)))
+
+    def _pitch_column(self, voice):
+        """The column for the voice's pitch (low notes left, high right), or None."""
+        n = len(voice)
+        padded = np.append(voice, np.float32(0.0))
+        on = np.where(self.used, padded[self.on_bins].max(axis=2), 0).astype(np.float32).sum(axis=1)
+        between = np.where(self.used, padded[self.between_bins].max(axis=2), 0).astype(np.float32).sum(axis=1)
+        scores = np.where(self.count >= 3, (on - np.float32(0.5) * between) / np.maximum(self.count, 1), -1.0)
+        best = int(np.argmax(scores))
+        average = np.float32(voice.sum() / np.float32(n) + np.float32(1e-12))
+        if scores[best] <= 0 or scores[best] / average <= 2.0:
+            return None
+        return (BANDS - 1) * np.log(self.f0s[best] / self.PITCH_LOW) / np.log(self.PITCH_HIGH / self.PITCH_LOW)
+
+
 # The beat lights the board from the middle outwards.
 _BURST = 1.0 - 0.45 * np.abs(np.arange(BANDS) - (BANDS - 1) / 2) / ((BANDS - 1) / 2)
 
@@ -244,12 +337,13 @@ class Analyzer:
 
     * empty (all): the whole spectrum, 40 Hz-16 kHz
     * "bass":   only 30-300 Hz, spread over all columns
-    * "vocals": 150 Hz-5 kHz of what's in the centre of the stereo image,
-      where singers are usually mixed; instruments spread to the sides drop out
+    * "vocals": the singing voice (see _Voice): a glow that rises when the
+      singer sings and sits at the column of the sung pitch
     * "beat":   kick-drum hits; the board bursts from the middle on each beat
     """
 
     PULSE_FALL_PER_S = 3.0
+    ALL_RISE_S, ALL_FALL_S = 0.025, 0.10  # "All" bars: quick up, softer down
     SILENCE_RMS = 10 ** (-70 / 20)  # quieter than -70 dBFS counts as silence
     CENTRE_SMOOTH_S = 0.25          # time constant of the stereo-centre estimate
     BEAT_BANDS = 4                  # lowest full-spectrum bands (40-150 Hz) used for the beat
@@ -259,7 +353,8 @@ class Analyzer:
         self.bass_window = np.hanning(BASS_FFT_SIZE).astype(np.float32)
         self.full = _BandMeter(FFT_SIZE, LOW_HZ, HIGH_HZ)
         self.bass = _BandMeter(BASS_FFT_SIZE, 30, 300, tilt=False)
-        self.vocals = _BandMeter(FFT_SIZE, 150, 5000)
+        self.voice = _Voice()
+        self.smooth_full = np.zeros(BANDS)
         self.prev_low_db = None
         self.flux_avg = 0.0
         self.beat = 0.0
@@ -286,7 +381,11 @@ class Analyzer:
 
         # Whole spectrum: drives "all" and the beat detector.
         spectrum = None if silent else np.abs(np.fft.rfft(mid * self.window)) / norm
-        full = self.full.update(spectrum, dt, sensitivity)
+        raw = self.full.update(spectrum, dt, sensitivity)
+        rising = raw > self.smooth_full
+        tau = np.where(rising, self.ALL_RISE_S, self.ALL_FALL_S)
+        self.smooth_full = self.smooth_full + (raw - self.smooth_full) * (1.0 - np.exp(-dt / tau))
+        full = _blur(self.smooth_full)
 
         # Beat: sudden rises in the low bands (spectral flux), compared with
         # their recent average. A steady bass line doesn't rise, a kick does.
@@ -317,7 +416,7 @@ class Analyzer:
             parts.append(levels)
             drives.append(float(np.sort(levels)[-4:].mean()))
         if "vocals" in follow:
-            vocal_spec = None
+            centre = None
             if not silent:
                 # Keep what sits in the centre: per frequency, L and R must be
                 # correlated over time (coherence) and about equally loud.
@@ -332,11 +431,10 @@ class Analyzer:
                 lr, ll, rr = self.cross
                 coherence = np.abs(lr) ** 2 / (ll * rr + 1e-20)
                 balance = 2 * np.sqrt(ll * rr) / (ll + rr + 1e-20)
-                mask = np.clip(coherence * balance, 0.0, 1.0) ** 2
-                vocal_spec = np.abs(np.fft.rfft(mid * self.window)) * mask / norm
-            levels = self.vocals.update(vocal_spec, dt, sensitivity)
+                centre = np.abs(np.fft.rfft(mid * self.window)) * np.clip(coherence * balance, 0.0, 1.0) ** 2
+            levels = self.voice.update(centre, dt, sensitivity, norm)
             parts.append(levels)
-            drives.append(float(levels.mean()))
+            drives.append(self.voice.level)
         if "beat" in follow:
             parts.append(self.beat * _BURST)
             drives.append(self.beat)

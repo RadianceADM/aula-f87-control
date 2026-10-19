@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.3 — 2026-10-20
+
+- **Music sync: Vocals follows the singing voice.** It keeps what sits in the centre of the
+  stereo mix and is harmonic, so drum hits, the 808 and wide instruments drop out. The keys
+  glow while someone sings, centred on the column of the sung pitch, and go dark between
+  vocal lines. On real hip-hop, the Vocals lights no longer move with the drums: the
+  correlation with the beat fell from 0.20 to 0.03.
+- **Smoother All bars.** They still rise at once, but fall smoothly and are slightly blended
+  with their neighbours. Frame-to-frame flicker is halved, and the reaction time is the same.
+  Bass and Beat are unchanged.
+- **Top-bar menu fixed.** Its items could show the wrong labels and clicks could hit the wrong
+  item after the battery item appeared.
+
 ## v0.4.2 — 2026-10-19
 
 - **About window** with the version, links, and this changelog.
